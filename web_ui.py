@@ -260,8 +260,6 @@ def render_analyze_form(prefill: str = "", monthly: float = 8000.0,
         "<div><label class='field' for='kloc'>KLOC override <span class='hint'>(optional)</span></label>"
         "<input type='number' step='0.1' id='kloc' name='kloc' placeholder='auto (from Function Points)'></div>"
         "</div>"
-        f"<label class='check'><input type='checkbox' name='demo' {checked}> "
-        "Demo mode <span class='hint'>(offline analyzer — no API key needed)</span></label>"
         "<button class='btn' type='submit'>Generate estimate →</button>"
         "</form></section>"
         f"<script>const SAMPLE={_js_str(SAMPLE_HINT)};</script>"

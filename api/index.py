@@ -92,31 +92,31 @@ def analyze() -> str:
         return ui.render_error("Please paste some meeting notes first.",
                                back_href="/analyze")
 
-    demo = request.form.get("demo") is not None
+    #demo = request.form.get("demo") is not None
     monthly = _to_float(request.form.get("monthly"), 8000.0)
     kloc_override = request.form.get("kloc")
 
     # 1) Choose the engine and record what actually happened (for the banner).
-    if demo:
-        analysis = offline_analyze(transcript)
-        notice = ("demo", "Demo mode: analysed with the offline analyzer "
-                          "(no API key used).")
-    else:
-        analyzer = TranscriptAnalyzer(AnalyzerConfig(use_llm=True))
-        if analyzer.llm_ready():
-            try:
-                analysis = analyzer._analyze_with_llm(transcript)
-                notice = ("live", "Analysed with the live LLM "
-                                  f"({analyzer.config.model}).")
-            except Exception as exc:  # network / quota / parse failure
-                analysis = offline_analyze(transcript)
-                notice = ("warn", f"Live LLM call failed ({exc}). "
-                                  "Fell back to the offline analyzer.")
-        else:
-            analysis = offline_analyze(transcript)
-            notice = ("warn", "No GEMINI_API_KEY (or google-genai package) "
-                              "detected, so the offline analyzer was used. "
-                              "Set your key to enable live mode.")
+    #if demo:
+    analysis = offline_analyze(transcript)
+    notice = ("demo", "Demo mode: analysed with the offline analyzer "
+                      "(no API key used).")
+    # else:
+    #     analyzer = TranscriptAnalyzer(AnalyzerConfig(use_llm=True))
+    #     if analyzer.llm_ready():
+    #         try:
+    #             analysis = analyzer._analyze_with_llm(transcript)
+    #             notice = ("live", "Analysed with the live LLM "
+    #                               f"({analyzer.config.model}).")
+    #         except Exception as exc:  # network / quota / parse failure
+    #             analysis = offline_analyze(transcript)
+    #             notice = ("warn", f"Live LLM call failed ({exc}). "
+    #                               "Fell back to the offline analyzer.")
+    #     else:
+    #         analysis = offline_analyze(transcript)
+    #         notice = ("warn", "No GEMINI_API_KEY (or google-genai package) "
+    #                           "detected, so the offline analyzer was used. "
+    #                           "Set your key to enable live mode.")
 
     # 2) Project type comes from the model.
     project_type = _project_type_key(
