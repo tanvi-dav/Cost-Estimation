@@ -1,0 +1,16 @@
+# --- Core (required for the website) ---
+flask>=3.0
+
+# --- AI mode: Google Gemini (only needed if you set GEMINI_API_KEY) ---
+# Use the new unified SDK. The old "google-generativeai" package is deprecated.
+google-genai>=1.0
+
+# --- Optional NLP enrichment: richer evidence extraction ---
+# The app falls back gracefully if these are not installed.
+spacy>=3.7
+pandas>=2.0
+
+# Note: the manual calculator, the offline/demo analyzer, COCOMO and FPA all
+# run on the Python standard library alone, so the site works even with none
+# of the optional packages installed.
+python-dotenv>=1.0

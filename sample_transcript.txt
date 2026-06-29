@@ -1,0 +1,33 @@
+Project Kick-off Meeting — "FreshCart" Online Grocery Platform
+Date: 12 March
+Attendees: Product Owner (Sara), Tech Lead (Daniel), 2 senior developers,
+2 junior developers, QA engineer.
+
+Sara: The goal is a web and mobile platform where customers browse groceries,
+add items to a basket and pay online. We need a secure payment gateway —
+this handles real financial transactions, so reliability is critical and we
+must be PCI-compliant.
+
+Daniel: Right. So we need user authentication and accounts, a product catalogue
+backed by a database, a shopping basket, an order service, and an admin
+dashboard for staff to manage stock and view reports. We'll also integrate with
+a third-party delivery-tracking API and an email notification service.
+
+Sara: How big is this really?
+
+Daniel: It's a fairly standard business web application — nothing embedded or
+real-time. The team knows the domain well, but two of the developers are quite
+junior, so programmer capability is mixed. We'd be using modern practices —
+CI/CD, code review, automated tests — and good tooling.
+
+Sara: Timeline?
+
+Daniel: There's some schedule pressure for a launch before the holiday season,
+but it's not extreme. I'd estimate the core system at roughly 45,000 lines of
+code based on similar projects we've built.
+
+QA: Because payments are involved, we'll need strong test coverage and
+reliability — I'd rate reliability as high.
+
+Sara: Agreed. Let's treat data and storage needs as normal for now; nothing
+unusual on memory or platform constraints.
