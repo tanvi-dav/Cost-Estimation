@@ -114,8 +114,9 @@ def analyze() -> str:
         kloc, project_type, drivers
     )
 
-    return ui.render_results(result, mode="Analysed", notice=notice,
-                             analysis=analysis, fpa_result=fpa_result,
+    return ui.render_results(result, mode="Automated", notice=notice,
+                             analysis=analysis, transcript=transcript,
+                             fpa_result=fpa_result,
                              kloc_note=kloc_note, back_href="/analyze")
 
 
