@@ -34,7 +34,6 @@ DRIVER_GROUPS: dict[str, list[str]] = {
 def esc(text: object) -> str:
     return html.escape(str(text), quote=True)
 
-
 # ---------------------------------------------------------------------------
 # Global stylesheet (inlined so it works on Vercel with no static routing)
 # ---------------------------------------------------------------------------
@@ -152,6 +151,12 @@ select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns=
 .chips{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
 .chip{font-family:var(--mono);font-size:.74rem;background:var(--accent-soft);color:var(--accent);padding:.2rem .55rem;border-radius:7px}
 .reason{margin-top:10px;color:var(--ink-2);font-size:.9rem}
+.source-link{display:inline-block;margin-top:10px;font-size:.82rem;font-weight:600;color:var(--accent)}
+.transcript-source{white-space:pre-wrap;font-family:var(--mono);font-size:.9rem;line-height:1.75;
+  background:#fbfcff;border:1px solid var(--line);border-radius:12px;padding:18px;max-height:430px;overflow:auto}
+.src-mark{border-radius:4px;padding:.08rem .18rem;color:#10151c;font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 16px}
+.legend-item{font-size:.78rem;font-weight:600;border-radius:999px;padding:.18rem .55rem;color:#10151c}
 
 /* tables */
 table{width:100%;border-collapse:collapse;font-size:.92rem}
@@ -360,20 +365,34 @@ def _formula(result) -> str:
 def _driver_table(result) -> str:
     if not result.driver_ratings:
         return ""
+
     rows = ""
     for code, rating in result.driver_ratings.items():
-        d = COST_DRIVERS.get(code, {})
-        mult = d.get("ratings", {}).get(rating, 1.0)
-        rows += (f"<tr><td>{esc(d.get('name', code))}</td><td>{esc(rating)}</td>"
-                 f"<td class='num'>×{mult:.2f}</td></tr>")
-    return ("<div class='card'><h2>Cost drivers</h2><table>"
-            "<tr><th>Driver</th><th>Rating</th><th class='num'>Multiplier</th></tr>"
-            f"{rows}</table></div>")
+        driver = COST_DRIVERS.get(code, {})
+        multiplier = driver.get("ratings", {}).get(rating, 1.0)
+        rows += (
+            f"<tr><td>{esc(driver.get('name', code))}</td>"
+            f"<td>{esc(rating)}</td>"
+            f"<td class='num'>×{multiplier:.2f}</td></tr>"
+        )
+
+    return (
+        "<div class='card'><h2>Cost drivers</h2><table>"
+        "<tr><th>Driver</th><th>Rating</th><th class='num'>Multiplier</th></tr>"
+        f"{rows}</table></div>"
+    )
 
 
-def _factor_grid(analysis: dict) -> str:
-    labels = {
-        "project_type": "Project type", "complexity": "Complexity",
+SOURCE_COLOURS = [
+    "#fde68a", "#bfdbfe", "#bbf7d0", "#fecaca", "#ddd6fe", "#fed7aa",
+    "#bae6fd", "#fbcfe8", "#ccfbf1", "#e9d5ff", "#d9f99d", "#c7d2fe",
+]
+
+
+def _analysis_labels() -> dict[str, str]:
+    return {
+        "project_type": "Project type",
+        "complexity": "Complexity",
         "required_reliability": "Required reliability",
         "programmer_capability": "Programmer capability",
         "analyst_capability": "Analyst capability",
@@ -384,7 +403,16 @@ def _factor_grid(analysis: dict) -> str:
         "team_experience": "Team experience",
         "modern_practices": "Modern practices",
         "software_tools": "Software tools",
+        "kloc": "KLOC",
     }
+
+
+def _source_colour(index: int) -> str:
+    return SOURCE_COLOURS[index % len(SOURCE_COLOURS)]
+
+
+def _factor_grid(analysis: dict) -> str:
+    labels = _analysis_labels()
     cards = ""
     for key, label in labels.items():
         f = analysis.get(key)
@@ -397,6 +425,9 @@ def _factor_grid(analysis: dict) -> str:
                else "<span class='tag warn'>confirm</span>")
         chips = "".join(f"<span class='chip'>{esc(e)}</span>"
                         for e in (f.get("evidence") or [])[:5])
+        source_link = ""
+        if f.get("source_spans"):
+            source_link = f"<a class='source-link' href='#src-{esc(key)}'>View highlighted source ↓</a>"
         cards += (
             "<div class='factor'>"
             f"<div class='ftop'><span class='fname'>{esc(label)}{tag}</span>"
@@ -405,6 +436,7 @@ def _factor_grid(analysis: dict) -> str:
             f"<div class='conf'>{conf}% confidence</div>"
             f"<div class='chips'>{chips}</div>"
             f"<div class='reason'>{esc(f.get('reasoning',''))}</div>"
+            f"{source_link}"
             "</div>"
         )
     return ("<div class='card'><h2>What the model inferred</h2>"
@@ -412,6 +444,85 @@ def _factor_grid(analysis: dict) -> str:
             "and a confidence score. Amber factors fell below 80% and would normally be confirmed.</p>"
             f"<div class='factors'>{cards}</div></div>")
 
+
+def _highlighted_transcript(transcript: str, analysis: dict) -> str:
+    """Render the original transcript with colour-coded source spans."""
+    if not transcript:
+        return ""
+
+    labels = _analysis_labels()
+    spans: list[dict] = []
+
+    for idx, (key, label) in enumerate(labels.items()):
+        factor = analysis.get(key) or {}
+        for span in factor.get("source_spans") or []:
+            try:
+                start = int(span["start"])
+                end = int(span["end"])
+            except (KeyError, TypeError, ValueError):
+                continue
+
+            if start < 0 or end <= start or end > len(transcript):
+                continue
+
+            spans.append({
+                "start": start,
+                "end": end,
+                "key": key,
+                "label": label,
+                "colour": _source_colour(idx),
+            })
+
+    if not spans:
+        return (
+            "<div class='card'><h2>Source transcript</h2>"
+            "<p class='muted'>No exact source spans were returned for this analysis.</p>"
+            f"<div class='transcript-source'>{esc(transcript)}</div></div>"
+        )
+
+    spans.sort(key=lambda s: (s["start"], -(s["end"] - s["start"])))
+    filtered: list[dict] = []
+    last_end = -1
+    for span in spans:
+        if span["start"] >= last_end:
+            filtered.append(span)
+            last_end = span["end"]
+
+    legend = ""
+    seen: set[str] = set()
+    for span in filtered:
+        if span["key"] in seen:
+            continue
+        seen.add(span["key"])
+        legend += (
+            f"<span class='legend-item' style='background:{span['colour']}'>"
+            f"{esc(span['label'])}</span>"
+        )
+
+    html_parts: list[str] = []
+    cursor = 0
+    used_ids: set[str] = set()
+    for span in filtered:
+        html_parts.append(esc(transcript[cursor:span["start"]]))
+        marked = esc(transcript[span["start"]:span["end"]])
+        mark_id = f"src-{span['key']}" if span["key"] not in used_ids else ""
+        used_ids.add(span["key"])
+        id_attr = f" id='{esc(mark_id)}'" if mark_id else ""
+        html_parts.append(
+            f"<mark{id_attr} class='src-mark' "
+            f"style='background:{span['colour']}' "
+            f"title='{esc(span['label'])}'>{marked}</mark>"
+        )
+        cursor = span["end"]
+    html_parts.append(esc(transcript[cursor:]))
+
+    return (
+        "<div class='card'><h2>Source transcript</h2>"
+        "<p class='muted' style='margin-top:-6px'>Highlighted text shows the exact transcript phrases "
+        "used to infer each automated parameter.</p>"
+        f"<div class='legend'>{legend}</div>"
+        f"<div class='transcript-source'>{''.join(html_parts)}</div></div>"
+    )
 
 def _fpa_block(fpa_result, kloc_note: str) -> str:
     rows = ""
@@ -437,8 +548,9 @@ def _fpa_block(fpa_result, kloc_note: str) -> str:
 
 
 def render_results(result, *, mode: str, notice: tuple[str, str] | None = None,
-                   analysis: dict | None = None, fpa_result=None,
-                   kloc_note: str = "", back_href: str = "/analyze") -> str:
+                   analysis: dict | None = None, transcript: str = "",
+                   fpa_result=None, kloc_note: str = "",
+                   back_href: str = "/analyze") -> str:
     parts = ["<section class='section wrap'>",
              "<div class='eyebrow'>Result</div>",
              f"<h1 style='font-size:1.9rem'>{esc(mode)} estimate</h1>"]
@@ -449,6 +561,7 @@ def render_results(result, *, mode: str, notice: tuple[str, str] | None = None,
     parts.append(_formula(result))
     if analysis:
         parts.append(_factor_grid(analysis))
+        parts.append(_highlighted_transcript(transcript, analysis))
     if fpa_result is not None:
         parts.append(_fpa_block(fpa_result, kloc_note))
     parts.append(_driver_table(result))

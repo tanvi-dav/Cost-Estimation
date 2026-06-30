@@ -149,7 +149,8 @@ def analyze() -> str:
     )
 
     return ui.render_results(result, mode="Automated", notice=notice,
-                             analysis=analysis, fpa_result=fpa_result,
+                             analysis=analysis, transcript=transcript,
+                             fpa_result=fpa_result,
                              kloc_note=kloc_note, back_href="/analyze")
 
 

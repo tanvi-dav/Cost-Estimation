@@ -49,18 +49,49 @@ def _is_negated(text_lower: str, position: int) -> bool:
     return any(cue in window for cue in NEGATION_CUES)
 
 
+def _find_keyword_spans(transcript: str, keywords: list[str]) -> list[dict]:
+    """
+    Return source spans for non-negated keyword matches.
+
+    Each span is suitable for UI highlighting:
+        {"start": 10, "end": 21, "text": "payment API"}
+
+    The matching is case-insensitive but preserves the original transcript text.
+    """
+    lowered = transcript.lower()
+    spans: list[dict] = []
+
+    for kw in keywords:
+        pattern = re.compile(re.escape(kw), re.IGNORECASE)
+        for match in pattern.finditer(transcript):
+            if _is_negated(lowered, match.start()):
+                continue
+            spans.append({
+                "start": match.start(),
+                "end": match.end(),
+                "text": transcript[match.start():match.end()],
+            })
+            break
+
+    return spans[:5]
+
+
+def _spans_to_evidence(transcript: str, spans: list[dict]) -> list[str]:
+    """Convert source spans into short evidence strings for existing displays."""
+    return [transcript[s["start"]:s["end"]] for s in spans]
+
+
 def _extract_evidence(transcript: str, keywords: list[str]) -> list[str]:
     """
     Return transcript phrases matching keywords, skipping negated mentions
     (so "nothing embedded or real-time" is NOT counted as evidence of an
     embedded system). spaCy is used for richer evidence if available.
     """
-    found: list[str] = []
-    lowered = transcript.lower()
-    for kw in keywords:
-        pos = lowered.find(kw)
-        if pos != -1 and not _is_negated(lowered, pos) and kw not in found:
-            found.append(kw)
+    found: list[str] = _spans_to_evidence(
+        transcript,
+        _find_keyword_spans(transcript, keywords),
+    )
+
     # Best-effort spaCy enrichment (never fatal if unavailable).
     try:
         import spacy  # type: ignore
@@ -95,94 +126,120 @@ KEYWORD_MAP = {
 }
 
 
-def _factor(value, confidence, reasoning, evidence):
+def _factor(value, confidence, reasoning, evidence, source_spans=None):
     """Build a single explainable factor dict."""
     return {
         "value": value,
         "confidence": confidence,
         "reasoning": reasoning,
         "evidence": evidence,
+        "source_spans": source_spans or [],
         "needs_confirmation": confidence < CONFIDENCE_THRESHOLD,
     }
 
 
-def _infer_kloc(transcript: str) -> tuple[float | None, list[str]]:
+def _infer_kloc(transcript: str) -> tuple[float | None, list[str], list[dict]]:
     """
     Try to read an explicit project size from the notes.
     Recognises e.g. '45 KLOC', '45,000 lines of code', '45000 LOC'.
-    Returns (kloc_or_None, evidence).
+    Returns (kloc_or_None, evidence, source_spans).
     """
-    text = transcript.replace(",", "")
     # Direct KLOC figure.
-    m = re.search(r"(\d+(?:\.\d+)?)\s*kloc", text, re.IGNORECASE)
+    m = re.search(r"(\d+(?:\.\d+)?)\s*kloc", transcript, re.IGNORECASE)
     if m:
-        return float(m.group(1)), [m.group(0).strip()]
+        matched = m.group(0).strip()
+        return float(m.group(1)), [matched], [{
+            "start": m.start(),
+            "end": m.end(),
+            "text": transcript[m.start():m.end()],
+        }]
+
     # Lines of code / LOC figure -> convert to KLOC.
-    m = re.search(r"(\d{3,})\s*(?:lines of code|lines|loc)\b", text, re.IGNORECASE)
+    m = re.search(
+        r"(\d[\d,]{2,})\s*(?:lines of code|lines|loc)\b",
+        transcript,
+        re.IGNORECASE,
+    )
     if m:
-        loc = float(m.group(1))
-        return round(loc / 1000.0, 2), [m.group(0).strip()]
-    return None, []
+        loc = float(m.group(1).replace(",", ""))
+        matched = m.group(0).strip()
+        return round(loc / 1000.0, 2), [matched], [{
+            "start": m.start(),
+            "end": m.end(),
+            "text": transcript[m.start():m.end()],
+        }]
+
+    return None, [], []
 
 
 def offline_analyze(transcript: str) -> dict:
     """Deterministic heuristic analysis used when the LLM is unavailable."""
     text = transcript.lower()
 
-    high_ev = _extract_evidence(transcript, KEYWORD_MAP["complexity_high"])
-    med_ev = _extract_evidence(transcript, KEYWORD_MAP["complexity_medium"])
+    high_spans = _find_keyword_spans(transcript, KEYWORD_MAP["complexity_high"])
+    med_spans = _find_keyword_spans(transcript, KEYWORD_MAP["complexity_medium"])
+    high_ev = _spans_to_evidence(transcript, high_spans)
+    med_ev = _spans_to_evidence(transcript, med_spans)
+
     if high_ev:
         complexity = _factor("High", 72,
                              "Several advanced/interacting components detected.",
-                             high_ev)
+                             high_ev, high_spans)
     elif med_ev:
         complexity = _factor("Medium", 70,
                              "Multiple integrated business modules detected.",
-                             med_ev)
+                             med_ev, med_spans)
     else:
         complexity = _factor("Low", 55,
                              "Few interacting components found in transcript.",
-                             med_ev or ["(little evidence)"])
+                             med_ev or ["(little evidence)"], med_spans)
 
-    rely_ev = _extract_evidence(transcript, KEYWORD_MAP["reliability_high"])
+    rely_spans = _find_keyword_spans(transcript, KEYWORD_MAP["reliability_high"])
+    rely_ev = _spans_to_evidence(transcript, rely_spans)
     reliability = _factor(
         "High" if rely_ev else "Nominal",
         74 if rely_ev else 60,
         "Financial/sensitive operations imply higher reliability."
         if rely_ev else "No strong reliability drivers found.",
         rely_ev or ["(none)"],
+        rely_spans,
     )
 
-    embedded_ev = _extract_evidence(transcript, KEYWORD_MAP["embedded"])
+    embedded_spans = _find_keyword_spans(transcript, KEYWORD_MAP["embedded"])
+    embedded_ev = _spans_to_evidence(transcript, embedded_spans)
     if embedded_ev:
         ptype = _factor("Embedded", 68,
                         "Hardware/real-time language suggests embedded mode.",
-                        embedded_ev)
+                        embedded_ev, embedded_spans)
     elif high_ev or med_ev:
         ptype = _factor("Semi-Detached", 70,
                         "Mixed experience and medium complexity business app.",
-                        (high_ev + med_ev)[:4])
+                        (high_ev + med_ev)[:4], (high_spans + med_spans)[:4])
     else:
         ptype = _factor("Organic", 65,
-                        "Small, familiar in-house style project.", med_ev or ["(default)"])
+                        "Small, familiar in-house style project.",
+                        med_ev or ["(default)"], med_spans)
 
-    junior_ev = _extract_evidence(transcript, KEYWORD_MAP["junior"])
+    junior_spans = _find_keyword_spans(transcript, KEYWORD_MAP["junior"])
+    junior_ev = _spans_to_evidence(transcript, junior_spans)
     prog_cap = _factor(
         "Low" if junior_ev else "Nominal",
         70 if junior_ev else 58,
         "Junior staff mentioned." if junior_ev else "Capability not specified.",
         junior_ev or ["(none)"],
+        junior_spans,
     )
 
     nominal = lambda why: _factor("Nominal", 55, why, ["(not specified)"])
 
-    inferred_kloc, kloc_evidence = _infer_kloc(transcript)
+    inferred_kloc, kloc_evidence, kloc_spans = _infer_kloc(transcript)
     if inferred_kloc is not None:
         kloc_block = {
             "value": inferred_kloc,
             "confidence": 82,
             "reasoning": "An explicit code-size figure was stated in the notes.",
             "evidence": kloc_evidence,
+            "source_spans": kloc_spans,
             "needs_confirmation": False,
         }
     else:
@@ -191,6 +248,7 @@ def offline_analyze(transcript: str) -> dict:
             "confidence": 40,
             "reasoning": "Transcript does not quantify size; ask the user.",
             "evidence": [],
+            "source_spans": [],
             "needs_confirmation": True,
         }
 
