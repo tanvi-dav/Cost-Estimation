@@ -151,28 +151,37 @@ def offline_analyze(transcript: str) -> dict:
         "Financial/sensitive operations imply higher reliability."
         if rely_ev else "No strong reliability drivers found.",
         rely_ev or ["(none)"],
-    )
+        )
 
     embedded_ev = _extract_evidence(transcript, KEYWORD_MAP["embedded"])
-    if embedded_ev:
-        ptype = _factor("Embedded", 68,
-                        "Hardware/real-time language suggests embedded mode.",
-                        embedded_ev)
-    elif high_ev or med_ev:
-        ptype = _factor("Semi-Detached", 70,
-                        "Mixed experience and medium complexity business app.",
-                        (high_ev + med_ev)[:4])
-    else:
-        ptype = _factor("Organic", 65,
-                        "Small, familiar in-house style project.", med_ev or ["(default)"])
-
     junior_ev = _extract_evidence(transcript, KEYWORD_MAP["junior"])
+
+    # Option selection: if the notes give enough signal to meaningfully rate
+    # cost drivers (complexity, reliability, hardware constraints, staffing),
+    # recommend Intermediate (EAF-adjusted). Otherwise Basic (size only).
+    driver_evidence = high_ev or med_ev or rely_ev or embedded_ev or junior_ev
+    if driver_evidence:
+        ptype = _factor(
+            "Intermediate", 70,
+            "Enough detail was found to rate cost drivers (complexity, "
+            "reliability, staffing, etc.), so an EAF-adjusted estimate is "
+            "recommended.",
+            (high_ev + med_ev + rely_ev + embedded_ev + junior_ev)[:5],
+        )
+    else:
+        ptype = _factor(
+            "Basic", 60,
+            "Little detail beyond project size was found, so a plain "
+            "size-only estimate (EAF = 1.0) is recommended.",
+            ["(little evidence)"],
+        )
+
     prog_cap = _factor(
         "Low" if junior_ev else "Nominal",
         70 if junior_ev else 58,
         "Junior staff mentioned." if junior_ev else "Capability not specified.",
         junior_ev or ["(none)"],
-    )
+        )
 
     nominal = lambda why: _factor("Nominal", 55, why, ["(not specified)"])
 
@@ -194,8 +203,34 @@ def offline_analyze(transcript: str) -> dict:
             "needs_confirmation": True,
         }
 
+    # Project category (Organic / Semi-Detached / Embedded): hardware/embedded
+    # cues -> Embedded; high complexity or junior-mixed-with-senior staffing
+    # cues -> Semi-Detached; otherwise a familiar in-house style -> Organic.
+    if embedded_ev:
+        category = _factor(
+            "Embedded", 72,
+            "Hardware/firmware/real-time cues suggest tight constraints "
+            "typical of an embedded project.",
+            embedded_ev,
+        )
+    elif high_ev or (junior_ev and rely_ev):
+        category = _factor(
+            "Semi-Detached", 65,
+            "A mix of complexity/reliability needs and varied staff "
+            "experience suggests a semi-detached project.",
+            (high_ev + junior_ev + rely_ev)[:5] or ["(mixed signals)"],
+            )
+    else:
+        category = _factor(
+            "Organic", 58,
+            "No strong hardware constraints or unusual complexity found; "
+            "a familiar, in-house style project is assumed.",
+            med_ev or ["(little evidence)"],
+            )
+
     return {
         "project_type": ptype,
+        "category": category,
         "complexity": complexity,
         "required_reliability": reliability,
         "programmer_capability": prog_cap,

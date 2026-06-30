@@ -13,9 +13,11 @@ from constants import (
     COST_DRIVERS,
     DEFAULT_CURRENCY,
     DEFAULT_MONTHLY_COST_PER_PERSON,
+    DEFAULT_PROJECT_CATEGORY,
     FP_TYPE_NAMES,
     GSC_FACTORS,
     LOC_PER_FP,
+    PROJECT_CATEGORIES,
     PROJECT_TYPE_LABELS,
 )
 from fpa import FunctionPointAnalyzer, generate_fpa_report
@@ -27,6 +29,16 @@ def _choose_project_type() -> str:
     keys = list(PROJECT_TYPE_LABELS.keys())
     idx = ask_choice("Select Project Type",
                      [PROJECT_TYPE_LABELS[k] for k in keys])
+    return keys[idx]
+
+
+def _choose_category() -> str:
+    """Prompt for the project category (Organic/Semi-Detached/Embedded)."""
+    keys = list(PROJECT_CATEGORIES.keys())
+    labels = [f"{PROJECT_CATEGORIES[k]['label']} - {PROJECT_CATEGORIES[k]['description']}"
+              for k in keys]
+    default = keys.index(DEFAULT_PROJECT_CATEGORY)
+    idx = ask_choice("Select Project Category", labels, default_index=default)
     return keys[idx]
 
 
@@ -72,20 +84,22 @@ def run_manual_fpa(language: str | None = None) -> float:
 
 
 def run_manual() -> None:
-    """Top-level Manual COCOMO Calculator flow (Mode 2)."""
+    """Top-level Manual COCOMO Calculator flow.
+
+    Option 1 - Basic:        KLOC + monthly cost only (EAF fixed at 1.0).
+    Option 2 - Intermediate: also rate every cost driver to build the EAF.
+    """
     print(banner("Manual COCOMO Calculator"))
 
     project_type = _choose_project_type()
+    category = _choose_category()
 
-    # Size can be entered directly or derived from Function Point Analysis.
-    if ask_yes_no("Derive size from Function Point Analysis instead of typing KLOC?",
-                  default=False):
-        kloc = run_manual_fpa()
-    else:
-        kloc = ask_float("\nEstimated size in KLOC (thousands of lines of code)",
-                         minimum=0.01)
+    kloc = ask_float("\nEstimated size in KLOC (thousands of lines of code)",
+                     minimum=0.01)
 
-    ratings = _collect_driver_ratings()
+    ratings: dict[str, str] = {}
+    if project_type == "intermediate":
+        ratings = _collect_driver_ratings()
 
     monthly = DEFAULT_MONTHLY_COST_PER_PERSON
     if ask_yes_no(f"\nUse default cost of {DEFAULT_CURRENCY}{monthly:,.0f}/dev/month?",
@@ -93,5 +107,5 @@ def run_manual() -> None:
         monthly = ask_float("Enter monthly cost per developer", minimum=0.0)
 
     estimator = CocomoEstimator(monthly_cost_per_person=monthly)
-    result = estimator.estimate(kloc, project_type, ratings)
+    result = estimator.estimate(kloc, project_type, ratings, category=category)
     print("\n" + generate_report(result))

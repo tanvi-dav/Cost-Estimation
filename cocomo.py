@@ -17,10 +17,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from constants import (
-    COCOMO_COEFFICIENTS,
     COST_DRIVERS,
     DEFAULT_MONTHLY_COST_PER_PERSON,
+    DEFAULT_PROJECT_CATEGORY,
     HOURS_PER_PERSON_MONTH,
+    PROJECT_CATEGORIES,
     PROJECT_TYPE_LABELS,
 )
 from utils import banner, money
@@ -33,6 +34,7 @@ from utils import banner, money
 class CocomoResult:
     """Immutable-ish bundle of every output value, ready for printing/JSON."""
     project_type: str
+    category: str
     kloc: float
     eaf: float
     effort_pm: float          # person-months
@@ -47,6 +49,7 @@ class CocomoResult:
         """Serialise for the web/JSON layer."""
         return {
             "project_type": PROJECT_TYPE_LABELS.get(self.project_type, self.project_type),
+            "category": PROJECT_CATEGORIES.get(self.category, {}).get("label", self.category),
             "kloc": round(self.kloc, 2),
             "eaf": round(self.eaf, 3),
             "effort_pm": round(self.effort_pm, 2),
@@ -80,31 +83,43 @@ def calculate_eaf(driver_ratings: dict[str, str]) -> float:
     return eaf
 
 
-def _coeffs(project_type: str) -> dict[str, float]:
-    """Look up the a/b/c/d coefficients, validating the project type."""
+def _validate_project_type(project_type: str) -> str:
+    """Normalise and validate the option key ('basic' or 'intermediate')."""
     key = project_type.strip().lower().replace("-", "_").replace(" ", "_")
-    if key not in COCOMO_COEFFICIENTS:
+    if key not in PROJECT_TYPE_LABELS:
         raise ValueError(
             f"Unknown project type '{project_type}'. "
-            f"Expected one of: {', '.join(COCOMO_COEFFICIENTS)}"
+            f"Expected one of: {', '.join(PROJECT_TYPE_LABELS)}"
         )
-    return COCOMO_COEFFICIENTS[key]
+    return key
 
 
-def calculate_effort(kloc: float, project_type: str, eaf: float = 1.0) -> float:
-    """Effort in person-months: a * KLOC^b * EAF."""
+def _validate_category(category: str) -> str:
+    """Normalise and validate the project category key (organic/semi_detached/embedded)."""
+    key = category.strip().lower().replace("-", "_").replace(" ", "_")
+    if key not in PROJECT_CATEGORIES:
+        raise ValueError(
+            f"Unknown project category '{category}'. "
+            f"Expected one of: {', '.join(PROJECT_CATEGORIES)}"
+        )
+    return key
+
+
+def calculate_effort(kloc: float, eaf: float = 1.0,
+                     category: str = DEFAULT_PROJECT_CATEGORY) -> float:
+    """Effort in person-months: a * KLOC^b * EAF, using the category's a/b."""
     if kloc <= 0:
         raise ValueError("KLOC must be greater than zero.")
-    c = _coeffs(project_type)
-    return c["a"] * (kloc ** c["b"]) * eaf
+    coeffs = PROJECT_CATEGORIES[_validate_category(category)]
+    return coeffs["a"] * (kloc ** coeffs["b"]) * eaf
 
 
-def calculate_schedule(effort_pm: float, project_type: str) -> float:
-    """Development schedule in calendar months: c * Effort^d."""
+def calculate_schedule(effort_pm: float, category: str = DEFAULT_PROJECT_CATEGORY) -> float:
+    """Development schedule in calendar months: c * Effort^d, using the category's c/d."""
     if effort_pm <= 0:
         raise ValueError("Effort must be greater than zero.")
-    c = _coeffs(project_type)
-    return c["c"] * (effort_pm ** c["d"])
+    coeffs = PROJECT_CATEGORIES[_validate_category(category)]
+    return coeffs["c"] * (effort_pm ** coeffs["d"])
 
 
 def calculate_staff(effort_pm: float, schedule_months: float) -> float:
@@ -136,16 +151,31 @@ class CocomoEstimator:
     def estimate(self,
                  kloc: float,
                  project_type: str,
-                 driver_ratings: dict[str, str] | None = None) -> CocomoResult:
-        """Run the full COCOMO pipeline and return a CocomoResult."""
+                 driver_ratings: dict[str, str] | None = None,
+                 category: str = DEFAULT_PROJECT_CATEGORY) -> CocomoResult:
+        """Run the full COCOMO pipeline and return a CocomoResult.
+
+        ``category`` (organic / semi_detached / embedded) selects the a/b/c/d
+        coefficients (Boehm, 1981).
+
+        Option 1 ("basic"): EAF is fixed at 1.0; cost drivers are ignored.
+        Option 2 ("intermediate"): EAF = product of the given cost drivers.
+        """
+        ptype = _validate_project_type(project_type)
+        category = _validate_category(category)
         driver_ratings = driver_ratings or {}
-        eaf = calculate_eaf(driver_ratings)
-        effort_pm = calculate_effort(kloc, project_type, eaf)
-        schedule = calculate_schedule(effort_pm, project_type)
+        if ptype == "basic":
+            eaf = 1.0
+            driver_ratings = {}
+        else:
+            eaf = calculate_eaf(driver_ratings)
+        effort_pm = calculate_effort(kloc, eaf, category)
+        schedule = calculate_schedule(effort_pm, category)
         staff = calculate_staff(effort_pm, schedule)
         cost = estimate_cost(effort_pm, self.monthly_cost_per_person)
         return CocomoResult(
-            project_type=project_type.strip().lower().replace("-", "_").replace(" ", "_"),
+            project_type=ptype,
+            category=category,
             kloc=kloc,
             eaf=eaf,
             effort_pm=effort_pm,
@@ -170,8 +200,11 @@ def generate_report(result: CocomoResult,
     analysis: {factor_name: {"value": ..., "reason": ...}}.
     """
     lines: list[str] = [banner("COCOMO ESTIMATION REPORT"), ""]
+    coeffs = PROJECT_CATEGORIES.get(result.category, {})
     lines += [
         f"Project Type:        {PROJECT_TYPE_LABELS.get(result.project_type, result.project_type)}",
+        f"Project Category:    {coeffs.get('label', result.category)} "
+        f"(a={coeffs.get('a')}, b={coeffs.get('b')}, c={coeffs.get('c')}, d={coeffs.get('d')})",
         f"Estimated Size:      {result.kloc:.1f} KLOC",
         f"Effort Adj. Factor:  {result.eaf:.3f}",
         f"Estimated Effort:    {result.effort_pm:.2f} Person-Months",

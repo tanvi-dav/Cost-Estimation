@@ -18,21 +18,51 @@ References
 from __future__ import annotations
 
 # ---------------------------------------------------------------------------
-# COCOMO project modes (Basic COCOMO coefficients a, b, c, d)
+# COCOMO coefficients (a, b, c, d), one set per project *category*
+# (Boehm, 1981 - Organic / Semi-Detached / Embedded).
 #   Effort  = a * (KLOC ** b) * EAF        [person-months]
 #   Schedule= c * (Effort ** d)            [calendar months]
+#
+# Separately, there are two calculation OPTIONS that decide the EAF:
+#   Option 1 - "Basic"        : EAF is fixed at 1.0 (no cost drivers).
+#   Option 2 - "Intermediate" : EAF is the product of the 15 cost drivers.
+# Category (a/b/c/d) and option (EAF) are independent choices - the user
+# picks one of each.
 # ---------------------------------------------------------------------------
-COCOMO_COEFFICIENTS: dict[str, dict[str, float]] = {
-    "organic":       {"a": 2.4, "b": 1.05, "c": 2.5, "d": 0.38},
-    "semi_detached": {"a": 3.0, "b": 1.12, "c": 2.5, "d": 0.35},
-    "embedded":      {"a": 3.6, "b": 1.20, "c": 2.5, "d": 0.32},
+PROJECT_CATEGORIES: dict[str, dict] = {
+    "organic": {
+        "label": "Organic",
+        "description": "Small, familiar, in-house style project with an "
+                       "experienced team and flexible requirements.",
+        "a": 2.4, "b": 1.05, "c": 2.5, "d": 0.38,
+    },
+    "semi_detached": {
+        "label": "Semi-Detached",
+        "description": "Mixed team experience, a blend of rigid and "
+                       "flexible requirements - the most common case.",
+        "a": 3.0, "b": 1.12, "c": 2.5, "d": 0.35,
+    },
+    "embedded": {
+        "label": "Embedded",
+        "description": "Tight constraints (hardware, real-time, complex "
+                       "interfaces) and strict requirements.",
+        "a": 3.6, "b": 1.20, "c": 2.5, "d": 0.32,
+    },
 }
 
-# Human-readable labels for the three modes (used by menus / reports).
+# Default category used if the user/analyzer doesn't specify one.
+DEFAULT_PROJECT_CATEGORY: str = "organic"
+
+# Backwards-compatible alias (organic coefficients) for any code that still
+# imports the single flat set.
+COCOMO_COEFFICIENTS: dict[str, float] = {
+    k: PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY][k] for k in ("a", "b", "c", "d")
+}
+
+# Human-readable labels for the two EAF options (used by menus / reports).
 PROJECT_TYPE_LABELS: dict[str, str] = {
-    "organic": "Organic",
-    "semi_detached": "Semi-Detached",
-    "embedded": "Embedded",
+    "basic": "Basic",
+    "intermediate": "Intermediate",
 }
 
 # ---------------------------------------------------------------------------
