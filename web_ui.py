@@ -182,7 +182,7 @@ def _nav(active: str) -> str:
         '<a class="brand" href="/"><span class="dot"></span>COCOMO&nbsp;·&nbsp;FPA Estimator</a>'
         '<nav class="nav">'
         + link("/", "home", "Home")
-        + link("/analyze", "analyze", "AI Analysis")
+        + link("/analyze", "analyze", "Automated Analysis")
         + link("/manual", "manual", "Manual Calculator")
         + "</nav></div></header>"
     )
@@ -216,7 +216,7 @@ def render_landing() -> str:
         "AFP = UFP × (0.65 + 0.01·ΣGSC)</div>"
         "<div class='modes'>"
         "<a class='mode' href='/analyze'><div class='num'>MODE 01</div>"
-        "<h3>AI Analysis</h3><p>The LLM reads your meeting notes, infers every COCOMO factor "
+        "<h3>Automated Analysis</h3><p>The system will identify key words within your notes and infer the COCOMO factors "
         "with evidence and confidence, sizes the system via Function Points, and produces the full report.</p>"
         "<span class='go'>Analyse notes →</span></a>"
         "<a class='mode' href='/manual'><div class='num'>MODE 02</div>"
@@ -245,7 +245,7 @@ def render_analyze_form(prefill: str = "", monthly: float = 8000.0,
     checked = "checked" if demo_default else ""
     body = (
         "<section class='section wrap'>"
-        "<div class='eyebrow'>Mode 01</div><h1 style='font-size:1.9rem'>AI Analysis</h1>"
+        "<div class='eyebrow'>Mode 01</div><h1 style='font-size:1.9rem'>Automated Analysis</h1>"
         "<p class='lede'>Paste your meeting notes. The model infers each factor, shows its "
         "evidence and confidence, and computes the estimate.</p>"
         "<form method='post' action='/analyze' class='card' style='margin-top:22px'>"
@@ -264,7 +264,7 @@ def render_analyze_form(prefill: str = "", monthly: float = 8000.0,
         "</form></section>"
         f"<script>const SAMPLE={_js_str(SAMPLE_HINT)};</script>"
     )
-    return render_page("AI Analysis · COCOMO + FPA", body, "analyze")
+    return render_page("Automated Analysis · COCOMO + FPA", body, "analyze")
 
 
 def render_manual_form() -> str:

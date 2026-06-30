@@ -99,8 +99,7 @@ def analyze() -> str:
     # 1) Choose the engine and record what actually happened (for the banner).
     #if demo:
     analysis = offline_analyze(transcript)
-    notice = ("demo", "Demo mode: analysed with the offline analyzer "
-                      "(no API key used).")
+    notice = ("demo", "Automated analysis")
     # else:
     #     analyzer = TranscriptAnalyzer(AnalyzerConfig(use_llm=True))
     #     if analyzer.llm_ready():
@@ -149,7 +148,7 @@ def analyze() -> str:
         kloc, project_type, drivers
     )
 
-    return ui.render_results(result, mode="AI", notice=notice,
+    return ui.render_results(result, mode="Automated", notice=notice,
                              analysis=analysis, fpa_result=fpa_result,
                              kloc_note=kloc_note, back_href="/analyze")
 
