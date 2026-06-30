@@ -35,7 +35,8 @@ STRICT RULES:
 5. If the project size cannot be reasonably inferred, set kloc.value to null
    and kloc.needs_confirmation to true so the application can ask the user.
 6. Use only these allowed labels:
-   - project_type: "Organic" | "Semi-Detached" | "Embedded"
+   - project_type: "Basic" | "Intermediate"
+   - category:     "Organic" | "Semi-Detached" | "Embedded"
    - complexity:   "Low" | "Medium" | "High" | "Very High"
    - rating factors (reliability, capabilities, constraints, experience,
      practices, tools, schedule): "Very Low" | "Low" | "Nominal" | "High" |
@@ -53,6 +54,7 @@ strings), needs_confirmation (boolean).
 
 {
   "project_type":            {factor},
+  "category":                {factor},
   "complexity":              {factor},
   "required_reliability":    {factor},
   "programmer_capability":   {factor},

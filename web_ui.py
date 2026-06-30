@@ -15,10 +15,11 @@ from __future__ import annotations
 import html
 
 from constants import (
-    COCOMO_COEFFICIENTS,
     COST_DRIVERS,
+    DEFAULT_PROJECT_CATEGORY,
     FP_TYPE_NAMES,
     HOURS_PER_PERSON_MONTH,
+    PROJECT_CATEGORIES,
     PROJECT_TYPE_LABELS,
 )
 
@@ -119,6 +120,29 @@ select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns=
 .driver-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
 .driver-grid .field{margin-top:6px}
 
+/* cost-driver rating grid (table of radio buttons, like Boehm's table) */
+.driver-table-wrap{overflow:auto;margin-top:10px;border:1px solid var(--line);border-radius:var(--radius)}
+table.driver-table{width:100%;border-collapse:collapse;font-size:.86rem}
+table.driver-table th,table.driver-table td{padding:.5rem .6rem;border-bottom:1px solid var(--line);text-align:center}
+table.driver-table thead th{background:var(--paper);font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+table.driver-table td.dname{text-align:left;font-weight:600;white-space:nowrap}
+table.driver-table td.dname .hint{display:block;font-weight:400;font-family:var(--mono);font-size:.72rem;color:var(--ink-3)}
+table.driver-table tbody tr.gsub td{background:var(--paper);font-family:var(--mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);text-align:left;font-weight:700}
+table.driver-table td.cell{cursor:pointer}
+table.driver-table td.cell.empty{cursor:default;color:var(--line)}
+table.driver-table td.cell input{accent-color:var(--accent);width:16px;height:16px}
+table.driver-table td.cell .mult{display:block;font-family:var(--mono);font-size:.68rem;color:var(--ink-3);margin-top:2px}
+
+/* category cards (Organic / Semi-Detached / Embedded) */
+.cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:8px}
+.cat-card{position:relative;border:1px solid var(--line);border-radius:12px;padding:14px 14px 12px;cursor:pointer;background:#fff}
+.cat-card input{position:absolute;top:12px;right:12px;width:16px;height:16px;accent-color:var(--accent)}
+.cat-card .cname{font-weight:700;font-family:var(--display)}
+.cat-card .cdesc{font-size:.8rem;color:var(--ink-2);margin-top:4px}
+.cat-card .ccoef{font-family:var(--mono);font-size:.72rem;color:var(--accent);margin-top:8px}
+.cat-card:has(input:checked){border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+@media(max-width:720px){.cat-grid{grid-template-columns:1fr}}
+
 /* readout (the hero result) */
 .readout{background:var(--ink);color:#fff;border-radius:var(--radius);padding:26px 28px;box-shadow:var(--shadow);margin-bottom:20px}
 .readout .topline{font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:#9aa3b2}
@@ -183,13 +207,13 @@ def _nav(active: str) -> str:
         cls = "active" if active == key else ""
         return f'<a class="{cls}" href="{href}">{text}</a>'
     return (
-        '<header class="site-head"><div class="wrap">'
-        '<a class="brand" href="/"><span class="dot"></span>COCOMO&nbsp;·&nbsp;FPA Estimator</a>'
-        '<nav class="nav">'
-        + link("/", "home", "Home")
-        + link("/analyze", "analyze", "Automated Analysis")
-        + link("/manual", "manual", "Manual Calculator")
-        + "</nav></div></header>"
+            '<header class="site-head"><div class="wrap">'
+            '<a class="brand" href="/"><span class="dot"></span>COCOMO&nbsp;Estimator&nbsp;</a>'
+            '<nav class="nav">'
+            + link("/", "home", "Home")
+            + link("/analyze", "analyze", "Analyse Notes")
+            + link("/manual", "manual", "Manual Calculator")
+            + "</nav></div></header>"
     )
 
 
@@ -211,26 +235,28 @@ def render_page(title: str, body: str, active: str = "") -> str:
 def render_landing() -> str:
     body = (
         "<section class='hero wrap'>"
-        "<div class='eyebrow'>Software cost estimation</div>"
-        "<h1>Turn meeting notes into a defensible cost estimate.</h1>"
-        "<p class='lede'>Paste a requirements meeting transcript and let the model infer the "
-        "COCOMO parameters and Function Point size — or fill in the figures yourself. "
-        "Every number is shown with the maths behind it.</p>"
+        "<div class='eyebrow'>Software cost estimation </div>"
+        "<h1>Turn meeting notes into a cost estimate, or build one by hand.</h1>"
+        "<p class='lede'>Paste a requirements meeting transcript and a keyword-based demo "
+        "analyser infers the COCOMO factors with evidence and confidence — or fill in the "
+        "figures yourself with the Basic / Intermediate calculator. Every number is shown "
+        "with the maths behind it.</p>"
         "<div class='formula-motif'>Effort = <b>a</b> × KLOC<sup>b</sup> × EAF &nbsp;&nbsp;|&nbsp;&nbsp; "
         "Schedule = <b>c</b> × Effort<sup>d</sup> &nbsp;&nbsp;|&nbsp;&nbsp; "
-        "AFP = UFP × (0.65 + 0.01·ΣGSC)</div>"
+        "Cost = Effort × Avg. Salary</div>"
         "<div class='modes'>"
         "<a class='mode' href='/analyze'><div class='num'>MODE 01</div>"
-        "<h3>Automated Analysis</h3><p>The system will identify key words within your notes and infer the COCOMO factors "
-        "with evidence and confidence, sizes the system via Function Points, and produces the full report.</p>"
+        "<h3>Analyse Notes </h3><p>A deterministic keyword analyser scans your notes "
+        "and suggests each factor with evidence and a confidence score — no live AI call, "
+        "fully offline and reproducible.</p>"
         "<span class='go'>Analyse notes →</span></a>"
         "<a class='mode' href='/manual'><div class='num'>MODE 02</div>"
-        "<h3>Manual Calculator</h3><p>Choose the project type, enter KLOC, and rate every cost driver "
-        "yourself. The app computes EAF, effort, schedule, team size and cost.</p>"
+        "<h3>Manual Calculator</h3><p>Choose Basic (size only) or Intermediate (size + cost "
+        "drivers) and enter the figures yourself.</p>"
         "<span class='go'>Open calculator →</span></a>"
         "</div></section>"
     )
-    return render_page("COCOMO + FPA Estimator", body, "home")
+    return render_page("COCOMO Estimator (Demo)", body, "home")
 
 
 SAMPLE_HINT = (
@@ -245,31 +271,82 @@ SAMPLE_HINT = (
 )
 
 
-def render_analyze_form(prefill: str = "", monthly: float = 8000.0,
-                        demo_default: bool = True) -> str:
-    checked = "checked" if demo_default else ""
+def render_analyze_form(prefill: str = "", monthly: float = 8000.0) -> str:
     body = (
         "<section class='section wrap'>"
-        "<div class='eyebrow'>Mode 01</div><h1 style='font-size:1.9rem'>Automated Analysis</h1>"
-        "<p class='lede'>Paste your meeting notes. The model infers each factor, shows its "
-        "evidence and confidence, and computes the estimate.</p>"
+        "<div class='eyebrow'>Mode 01</div><h1 style='font-size:1.9rem'>Analyse Meeting Notes</h1>"
+        "<p class='lede'>Paste your meeting notes. A deterministic, keyword-based demo "
+        "analyser infers each factor, shows its evidence and confidence, and computes "
+        "the estimate — no live AI call is made.</p>"
         "<form method='post' action='/analyze' class='card' style='margin-top:22px'>"
         "<label class='field' for='transcript'>Meeting notes / transcript</label>"
         f"<textarea id='transcript' name='transcript' placeholder='Paste the meeting notes here…'>{esc(prefill)}</textarea>"
         "<button type='button' class='linkbtn' onclick=\"document.getElementById('transcript').value=SAMPLE\">"
         "Insert sample notes</button>"
         "<div class='row'>"
-        "<div><label class='field' for='monthly'>Cost per developer / month "
+        "<div><label class='field' for='monthly'>Average developer salary / month "
         "<span class='hint'>(£)</span></label>"
         f"<input type='number' step='100' id='monthly' name='monthly' value='{int(monthly)}'></div>"
         "<div><label class='field' for='kloc'>KLOC override <span class='hint'>(optional)</span></label>"
-        "<input type='number' step='0.1' id='kloc' name='kloc' placeholder='auto (from Function Points)'></div>"
+        "<input type='number' step='0.1' id='kloc' name='kloc' placeholder='auto (from notes / Function Points)'></div>"
         "</div>"
         "<button class='btn' type='submit'>Generate estimate →</button>"
         "</form></section>"
         f"<script>const SAMPLE={_js_str(SAMPLE_HINT)};</script>"
     )
-    return render_page("Automated Analysis · COCOMO + FPA", body, "analyze")
+    return render_page("Analyse Notes · COCOMO", body, "analyze")
+
+
+def _category_cards_html(selected: str = DEFAULT_PROJECT_CATEGORY) -> str:
+    cards = ""
+    for key, cat in PROJECT_CATEGORIES.items():
+        checked = " checked" if key == selected else ""
+        cards += (
+            f"<label class='cat-card'><input type='radio' name='category' value='{key}'{checked}>"
+            f"<div class='cname'>{esc(cat['label'])}</div>"
+            f"<div class='cdesc'>{esc(cat['description'])}</div>"
+            f"<div class='ccoef'>a={cat['a']} b={cat['b']} c={cat['c']} d={cat['d']}</div>"
+            "</label>"
+        )
+    return f"<div class='cat-grid'>{cards}</div>"
+
+
+# All distinct rating labels across every driver, in Boehm's canonical order
+# (used as the column headers of the cost-driver grid).
+ALL_RATING_LABELS = ["Very Low", "Low", "Nominal", "High", "Very High", "Extra High"]
+
+
+def _driver_grid_table_html() -> str:
+    """Render every cost driver as one row of a single grid/table, grouped by
+    attribute category, with a radio button per valid rating column (mirrors
+    the Boehm cost-driver table)."""
+    header = "".join(f"<th>{esc(r)}</th>" for r in ALL_RATING_LABELS)
+    rows = ""
+    for group_name, codes in DRIVER_GROUPS.items():
+        rows += f"<tr class='gsub'><td colspan='{len(ALL_RATING_LABELS) + 1}'>{esc(group_name)}</td></tr>"
+        for code in codes:
+            d = COST_DRIVERS[code]
+            cells = ""
+            for label in ALL_RATING_LABELS:
+                if label in d["ratings"]:
+                    checked = " checked" if label == "Nominal" else ""
+                    mult = d["ratings"][label]
+                    cells += (
+                        f"<td class='cell'><label>"
+                        f"<input type='radio' name='{code}' value='{esc(label)}'{checked}>"
+                        f"<span class='mult'>×{mult:.2f}</span></label></td>"
+                    )
+                else:
+                    cells += "<td class='cell empty'>—</td>"
+            rows += (
+                "<tr><td class='dname'>"
+                f"{esc(d['name'])}<span class='hint'>{code}</span></td>{cells}</tr>"
+            )
+    return (
+        "<div class='driver-table-wrap'><table class='driver-table'>"
+        f"<thead><tr><th></th>{header}</tr></thead>"
+        f"<tbody>{rows}</tbody></table></div>"
+    )
 
 
 def render_manual_form() -> str:
@@ -277,43 +354,31 @@ def render_manual_form() -> str:
     pt_opts = "".join(
         f"<option value='{k}'>{v}</option>" for k, v in PROJECT_TYPE_LABELS.items()
     )
-    # Driver groups
-    groups_html = ""
-    for group_name, codes in DRIVER_GROUPS.items():
-        fields = ""
-        for code in codes:
-            d = COST_DRIVERS[code]
-            opts = "".join(
-                f"<option value='{esc(r)}'{' selected' if r=='Nominal' else ''}>"
-                f"{esc(r)} (×{m:.2f})</option>"
-                for r, m in d["ratings"].items()
-            )
-            fields += (
-                "<div class='field'>"
-                f"<label class='field' for='{code}'>{esc(d['name'])} "
-                f"<span class='hint'>{code}</span></label>"
-                f"<select id='{code}' name='{code}'>{opts}</select></div>"
-            )
-        groups_html += (
-            f"<div class='group'><div class='glabel'>{esc(group_name)}</div>"
-            f"<div class='driver-grid'>{fields}</div></div>"
-        )
 
     body = (
         "<section class='section wrap'>"
-        "<div class='eyebrow'>Mode 02</div><h1 style='font-size:1.9rem'>Manual COCOMO Calculator</h1>"
-        "<p class='lede'>Select the project type, enter the size, and rate every effort multiplier. "
+        "<div class='eyebrow'>Demo</div><h1 style='font-size:1.9rem'>Manual COCOMO Calculator</h1>"
+        "<p class='lede'>Choose Basic or Intermediate, pick the project category (sets a/b/c/d), "
+        "enter the size, and (for Intermediate) rate every effort multiplier on the grid below. "
         "The app computes the EAF, effort, schedule, average staff and cost.</p>"
         "<form method='post' action='/manual' class='card' style='margin-top:22px'>"
         "<div class='row'>"
-        f"<div><label class='field' for='ptype'>Project type</label><select id='ptype' name='ptype'>{pt_opts}</select></div>"
+        "<div><label class='field' for='ptype'>Option</label>"
+        f"<select id='ptype' name='ptype' onchange=\"document.getElementById('drivers').style.display="
+        "this.value==='intermediate'?'block':'none'\">"
+        f"{pt_opts}</select></div>"
         "<div><label class='field' for='kloc'>Size in KLOC <span class='hint'>(thousands of lines)</span></label>"
         "<input type='number' step='0.1' min='0.1' id='kloc' name='kloc' value='45' required></div>"
         "</div>"
-        "<label class='field' for='monthly'>Cost per developer / month <span class='hint'>(£)</span></label>"
+        "<label class='field'>Project category <span class='hint'>(sets a, b, c, d)</span></label>"
+        f"{_category_cards_html()}"
+        "<label class='field' for='monthly'>Average developer salary / month <span class='hint'>(£)</span></label>"
         "<input type='number' step='100' id='monthly' name='monthly' value='8000'>"
+        "<div id='drivers' style='display:none'>"
         "<h3 style='margin-top:26px;font-family:var(--display)'>Effort multipliers (cost drivers)</h3>"
-        f"{groups_html}"
+        "<p class='muted' style='margin-top:-6px'>Pick one rating per row.</p>"
+        f"{_driver_grid_table_html()}"
+        "</div>"
         "<button class='btn' type='submit'>Compute estimate →</button>"
         "</form></section>"
     )
@@ -321,7 +386,7 @@ def render_manual_form() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Results rendering (shared by AI + manual)
+# Results rendering
 # ---------------------------------------------------------------------------
 def _readout(result) -> str:
     c = result.currency
@@ -329,7 +394,8 @@ def _readout(result) -> str:
         "<div class='readout'>"
         "<div class='topline'>Estimated total cost</div>"
         f"<div class='cost'>{c}{result.cost:,.0f}</div>"
-        f"<div class='costsub'>{PROJECT_TYPE_LABELS.get(result.project_type, result.project_type)} project · "
+        f"<div class='costsub'>{PROJECT_TYPE_LABELS.get(result.project_type, result.project_type)} · "
+        f"{PROJECT_CATEGORIES.get(result.category, {}).get('label', result.category)} · "
         f"{result.kloc:.1f} KLOC · EAF {result.eaf:.3f}</div>"
         "<div class='stats'>"
         f"<div class='stat'><div class='k'>Effort</div><div class='v'>{result.effort_pm:.1f}<span style='font-size:.7rem;color:#9aa3b2'> PM</span></div></div>"
@@ -341,7 +407,7 @@ def _readout(result) -> str:
 
 
 def _formula(result) -> str:
-    co = COCOMO_COEFFICIENTS[result.project_type]
+    co = PROJECT_CATEGORIES.get(result.category, PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY])
     a, b, cc, d = co["a"], co["b"], co["c"], co["d"]
     return (
         "<div class='card'><h2>How this was calculated</h2>"
@@ -439,7 +505,7 @@ def _factor_grid(analysis: dict) -> str:
             f"{source_link}"
             "</div>"
         )
-    return ("<div class='card'><h2>What the model inferred</h2>"
+    return ("<div class='card'><h2>What the analyser inferred</h2>"
             "<p class='muted' style='margin-top:-6px'>Each factor shows the evidence found in your notes "
             "and a confidence score. Amber factors fell below 80% and would normally be confirmed.</p>"
             f"<div class='factors'>{cards}</div></div>")
@@ -568,7 +634,7 @@ def render_results(result, *, mode: str, notice: tuple[str, str] | None = None,
     parts.append(
         f"<a class='btn ghost' href='{back_href}'>← Run another estimate</a></section>"
     )
-    return render_page(f"{mode} estimate · COCOMO + FPA", "".join(parts))
+    return render_page(f"{mode} estimate · COCOMO", "".join(parts))
 
 
 def render_error(message: str, back_href: str = "/") -> str:

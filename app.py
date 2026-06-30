@@ -1,14 +1,17 @@
 """
 app.py
 ======
-Command-line entry point and the interactive "explainable AI" transcript flow
-(Mode 1). Run with:  python app.py
+Command-line entry point. Demo mode only - the transcript analyzer is the
+deterministic, keyword-based offline analyzer (no live AI/LLM call).
+Run with:  python app.py
 
 Modes
 -----
-1. Analyze Meeting Transcript  -> AI infers parameters, you confirm each one
-2. Manual COCOMO Estimation    -> you enter every value
-3. Function Point Analysis      -> size a project from its functionality
+1. Analyze Meeting Transcript (Demo) -> keyword analyzer infers parameters,
+                                         you confirm each one
+2. Manual COCOMO Estimation          -> Basic (Option 1) or Intermediate
+                                         (Option 2), you enter every value
+3. Function Point Analysis           -> size a project from its functionality
 4. Exit
 """
 
@@ -18,13 +21,16 @@ from cocomo import CocomoEstimator, generate_report
 from constants import (
     COST_DRIVERS,
     DEFAULT_MONTHLY_COST_PER_PERSON,
+    DEFAULT_PROJECT_CATEGORY,
+    PROJECT_CATEGORIES,
     PROJECT_TYPE_LABELS,
 )
 from manual import run_manual, run_manual_fpa
-from transcript_ai import TranscriptAnalyzer
+from transcript_ai import offline_analyze
 from utils import ask_choice, ask_float, ask_yes_no, banner, read_transcript
 
-# Maps the AI's factor keys to intermediate-COCOMO driver codes for the EAF.
+# Maps the demo analyzer's factor keys to intermediate-COCOMO driver codes
+# for the EAF (only used when the recommended option is "Intermediate").
 FACTOR_TO_DRIVER = {
     "required_reliability": "RELY",
     "complexity": "CPLX",
@@ -61,6 +67,18 @@ def _normalise_rating(driver_code: str, raw_value: str) -> str:
     return title if title in valid else "Nominal"
 
 
+def _project_type_key(raw_value: str) -> str:
+    """Map the analyzer's 'Basic'/'Intermediate' label onto a valid key."""
+    key = str(raw_value).strip().lower().replace("-", "_").replace(" ", "_")
+    return key if key in PROJECT_TYPE_LABELS else "basic"
+
+
+def _category_key(raw_value: str) -> str:
+    """Map the analyzer's category label onto a valid PROJECT_CATEGORIES key."""
+    key = str(raw_value).strip().lower().replace("-", "_").replace(" ", "_")
+    return key if key in PROJECT_CATEGORIES else DEFAULT_PROJECT_CATEGORY
+
+
 def _confirm_factor(label: str, factor: dict) -> str:
     """
     Show one factor's evidence/reasoning and let the user accept or override.
@@ -77,7 +95,7 @@ def _confirm_factor(label: str, factor: dict) -> str:
     print(f"Reasoning:  {factor.get('reasoning', '(none)')}")
 
     if not factor.get("needs_confirmation") and not ask_yes_no(
-        "Confidence is high. Review/change this anyway?", default=False
+            "Confidence is high. Review/change this anyway?", default=False
     ):
         return factor.get("value")
 
@@ -96,45 +114,63 @@ def _label_to_key(label: str) -> str:
 
 
 def run_transcript_analysis() -> None:
-    """Mode 1: explainable AI analysis of a requirements transcript."""
-    print(banner("AI Transcript Analysis"))
+    """Mode 1: keyword-based demo analysis of a requirements transcript."""
+    print(banner("Analyse Meeting Transcript"))
     transcript = read_transcript()
     if not transcript.strip():
         print("No transcript provided.")
         return
 
-    print("\nAnalysing transcript... (LLM if configured, else offline analyzer)")
-    analysis = TranscriptAnalyzer().analyze(transcript)
+    analysis = offline_analyze(transcript)
 
-    # --- Project type ---
-    pt_factor = analysis.get("project_type", {})
-    pt_value = _confirm_factor("Project Type", pt_factor) or "Organic"
-    project_type = pt_value.lower().replace("-", "_").replace(" ", "_")
-    if project_type not in PROJECT_TYPE_LABELS:
-        project_type = "organic"
+    # --- Recommended option (Basic vs Intermediate) ---
+    ptype_factor = analysis.get("project_type", {})
+    print(f"\nRecommended option: {ptype_factor.get('value')} "
+          f"({ptype_factor.get('confidence')}% confidence)")
+    print(f"Reasoning: {ptype_factor.get('reasoning', '')}")
+    project_type = _project_type_key(ptype_factor.get("value", "basic"))
+    if ask_yes_no("Use this option?", default=True) is False:
+        idx = ask_choice("Choose the option", list(PROJECT_TYPE_LABELS.values()))
+        project_type = list(PROJECT_TYPE_LABELS.keys())[idx]
+
+    # --- Project category (Organic / Semi-Detached / Embedded) ---
+    cat_factor = analysis.get("category", {})
+    category = _category_key(cat_factor.get("value", DEFAULT_PROJECT_CATEGORY))
+    if cat_factor:
+        print(f"\nRecommended category: {PROJECT_CATEGORIES[category]['label']} "
+              f"({cat_factor.get('confidence')}% confidence)")
+        print(f"Reasoning: {cat_factor.get('reasoning', '')}")
+    if not cat_factor or ask_yes_no("Use this category?", default=True) is False:
+        keys = list(PROJECT_CATEGORIES.keys())
+        idx = ask_choice("Choose the project category",
+                         [PROJECT_CATEGORIES[k]['label'] for k in keys],
+                         default_index=keys.index(category))
+        category = keys[idx]
 
     # --- Cost drivers (build EAF inputs) + reasoning summary ---
+    # Only needed for the Intermediate option.
     driver_ratings: dict[str, str] = {}
     reasoning: dict[str, dict] = {}
-    for key, code in FACTOR_TO_DRIVER.items():
-        factor = analysis.get(key)
-        if not factor:
-            continue
-        label = key.replace("_", " ").title()
-        agreed = _confirm_factor(label, factor)
-        driver_ratings[code] = _normalise_rating(code, agreed)
-        reasoning[label] = {"value": agreed, "reason": factor.get("reasoning")}
+    if project_type == "intermediate":
+        for key, code in FACTOR_TO_DRIVER.items():
+            factor = analysis.get(key)
+            if not factor:
+                continue
+            label = key.replace("_", " ").title()
+            agreed = _confirm_factor(label, factor)
+            driver_ratings[code] = _normalise_rating(code, agreed)
+            reasoning[label] = {"value": agreed, "reason": factor.get("reasoning")}
 
-    # --- Size (KLOC): from FPA, from the AI, or from the user ---
+    # --- Size (KLOC): from FPA, from the analyzer, or from the user ---
     kloc = _resolve_kloc(analysis.get("kloc", {}), analysis.get("function_points"))
 
     # --- Cost assumption ---
     monthly = DEFAULT_MONTHLY_COST_PER_PERSON
-    if not ask_yes_no(f"\nUse default cost of £{monthly:,.0f}/dev/month?", default=True):
-        monthly = ask_float("Enter monthly cost per developer", minimum=0.0)
+    if not ask_yes_no(f"\nUse default salary of £{monthly:,.0f}/dev/month?", default=True):
+        monthly = ask_float("Enter average developer salary per month", minimum=0.0)
 
     result = CocomoEstimator(monthly_cost_per_person=monthly).estimate(
-        kloc, project_type, driver_ratings
+        kloc, project_type, driver_ratings, category=category
     )
     print("\n" + generate_report(result, reasoning))
 
@@ -150,7 +186,7 @@ def _resolve_kloc(kloc_factor: dict, fp_block: dict | None) -> float:
 
     # Offer to derive it from Function Point Analysis.
     if fp_block and ask_yes_no(
-        "\nSize is uncertain. Derive it from Function Point Analysis?", default=True
+            "\nSize is uncertain. Derive it from Function Point Analysis?", default=True
     ):
         from fpa import FunctionPointAnalyzer
         counts = {k: v for k, v in fp_block.items() if isinstance(v, dict)}
@@ -172,7 +208,7 @@ def main() -> None:
         print("\n" + banner("COCOMO Project Estimator"))
         choice = ask_choice(
             "Select an option",
-            ["Analyze Meeting Transcript (AI)",
+            ["Analyse Meeting Transcript",
              "Manual COCOMO Estimation",
              "Function Point Analysis",
              "Exit"],
