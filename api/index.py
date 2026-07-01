@@ -82,9 +82,12 @@ def analyze() -> str:
     analysis = offline_analyze(transcript)
     notice = ("demo", "Analysed with the keyword-based demo analyser.")
 
-    # Recommended option (Basic vs Intermediate) comes from the analyzer.
+    # Recommended option (Basic vs Intermediate) and category come from the analyzer.
     project_type = _project_type_key(
         str(analysis.get("project_type", {}).get("value", "basic"))
+    )
+    category = _category_key(
+        str(analysis.get("category", {}).get("value", DEFAULT_PROJECT_CATEGORY))
     )
 
     # Size: explicit override > size stated in notes > ask the user.
@@ -107,7 +110,7 @@ def analyze() -> str:
     # Cost drivers only matter for the Intermediate option.
     drivers = _drivers_from_analysis(analysis) if project_type == "intermediate" else {}
     result = CocomoEstimator(monthly_cost_per_person=monthly).estimate(
-        kloc, project_type, drivers
+        kloc, project_type, drivers, category=category
     )
 
     return ui.render_results(result, mode="Automated", notice=notice,

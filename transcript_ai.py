@@ -62,7 +62,7 @@ def _find_keyword_spans(transcript: str, keywords: list[str]) -> list[dict]:
     spans: list[dict] = []
 
     for kw in keywords:
-        pattern = re.compile(re.escape(kw), re.IGNORECASE)
+        pattern = re.compile(r"\b" + re.escape(kw) + r"\b", re.IGNORECASE)
         for match in pattern.finditer(transcript):
             if _is_negated(lowered, match.start()):
                 continue
@@ -208,17 +208,17 @@ def offline_analyze(transcript: str) -> dict:
     embedded_spans = _find_keyword_spans(transcript, KEYWORD_MAP["embedded"])
     embedded_ev = _spans_to_evidence(transcript, embedded_spans)
     if embedded_ev:
-        ptype = _factor("Embedded", 68,
-                        "Hardware/real-time language suggests embedded mode.",
-                        embedded_ev, embedded_spans)
+        category = _factor("Embedded", 68,
+                           "Hardware/real-time language suggests embedded mode.",
+                           embedded_ev, embedded_spans)
     elif high_ev or med_ev:
-        ptype = _factor("Semi-Detached", 70,
-                        "Mixed experience and medium complexity business app.",
-                        (high_ev + med_ev)[:4], (high_spans + med_spans)[:4])
+        category = _factor("Semi-Detached", 70,
+                           "Mixed experience and medium complexity business app.",
+                           (high_ev + med_ev)[:4], (high_spans + med_spans)[:4])
     else:
-        ptype = _factor("Organic", 65,
-                        "Small, familiar in-house style project.",
-                        med_ev or ["(default)"], med_spans)
+        category = _factor("Organic", 65,
+                           "Small, familiar in-house style project.",
+                           med_ev or ["(default)"], med_spans)
 
     junior_spans = _find_keyword_spans(transcript, KEYWORD_MAP["junior"])
     junior_ev = _spans_to_evidence(transcript, junior_spans)
@@ -229,6 +229,26 @@ def offline_analyze(transcript: str) -> dict:
         junior_ev or ["(none)"],
         junior_spans,
     )
+
+    # Recommend Basic vs Intermediate COCOMO: Intermediate is only worth the
+    # extra rating effort when the notes actually give us signal on the cost
+    # drivers (complexity, reliability, staffing, or platform constraints).
+    driver_signal_ev = (high_ev + med_ev + rely_ev + junior_ev + embedded_ev)[:5]
+    driver_signal_spans = (high_spans + med_spans + rely_spans + junior_spans + embedded_spans)[:5]
+    if driver_signal_ev:
+        project_type = _factor(
+            "Intermediate", 66,
+            "The notes give enough signal on complexity, reliability, staffing "
+            "or platform constraints to rate the cost drivers.",
+            driver_signal_ev, driver_signal_spans,
+        )
+    else:
+        project_type = _factor(
+            "Basic", 55,
+            "No strong cost-driver signals were found, so a size-only estimate "
+            "is recommended.",
+            ["(no strong signals)"],
+        )
 
     nominal = lambda why: _factor("Nominal", 55, why, ["(not specified)"])
 
@@ -253,7 +273,8 @@ def offline_analyze(transcript: str) -> dict:
         }
 
     return {
-        "project_type": ptype,
+        "project_type": project_type,
+        "category": category,
         "complexity": complexity,
         "required_reliability": reliability,
         "programmer_capability": prog_cap,
