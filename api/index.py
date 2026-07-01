@@ -32,7 +32,6 @@ import web_ui as ui  # noqa: E402
 from app import FACTOR_TO_DRIVER, _normalise_rating, _project_type_key  # noqa: E402
 from cocomo import CocomoEstimator  # noqa: E402
 from constants import COST_DRIVERS  # noqa: E402
-from fpa import FunctionPointAnalyzer  # noqa: E402
 from transcript_ai import offline_analyze  # noqa: E402
 
 app = Flask(__name__)
@@ -88,8 +87,7 @@ def analyze() -> str:
         str(analysis.get("project_type", {}).get("value", "basic"))
     )
 
-    # Size: explicit override > size stated in notes > derive from FPA.
-    fpa_result = None
+    # Size: explicit override > size stated in notes > ask the user.
     kloc_note = ""
     kloc_factor = analysis.get("kloc", {}) or {}
     if kloc_override:
@@ -100,13 +98,11 @@ def analyze() -> str:
         ev = ", ".join(kloc_factor.get("evidence", [])) or "stated in the notes"
         kloc_note = f"Size taken from the notes ({ev}): {kloc:g} KLOC."
     else:
-        fp_block = analysis.get("function_points", {}) or {}
-        counts = {k: v for k, v in fp_block.items() if isinstance(v, dict)}
-        fpa_result = FunctionPointAnalyzer().analyze(counts, [3] * 14, "default")
-        kloc = max(fpa_result.kloc, 0.5)  # floor avoids zero-size demos
-        kloc_note = (f"No size was stated, so it was derived from the inferred "
-                     f"function points: {fpa_result.afp:.0f} AFP × "
-                     f"{fpa_result.loc_per_fp} LOC/FP ≈ {kloc:.2f} KLOC.")
+        return ui.render_error(
+            "Couldn't determine a project size from your notes. Please add a "
+            "KLOC override and try again.",
+            back_href="/analyze",
+        )
 
     # Cost drivers only matter for the Intermediate option.
     drivers = _drivers_from_analysis(analysis) if project_type == "intermediate" else {}
@@ -116,7 +112,6 @@ def analyze() -> str:
 
     return ui.render_results(result, mode="Automated", notice=notice,
                              analysis=analysis, transcript=transcript,
-                             fpa_result=fpa_result,
                              kloc_note=kloc_note, back_href="/analyze")
 
 

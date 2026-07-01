@@ -20,9 +20,8 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT = """\
 You are an expert software cost-estimation analyst specialising in the COCOMO
-model and Function Point Analysis. You read a software requirements meeting
-transcript and infer the engineering characteristics needed to estimate the
-project.
+model. You read a software requirements meeting transcript and infer the
+engineering characteristics needed to estimate the project.
 
 STRICT RULES:
 1. Think step by step internally, but OUTPUT ONLY a single valid JSON object.
@@ -72,14 +71,6 @@ strings), needs_confirmation (boolean).
       "reasoning": "<why>",
       "evidence": ["..."],
       "needs_confirmation": <true|false>
-  },
-  "function_points": {
-      "EI":  {"low":0,"average":0,"high":0},
-      "EO":  {"low":0,"average":0,"high":0},
-      "EQ":  {"low":0,"average":0,"high":0},
-      "ILF": {"low":0,"average":0,"high":0},
-      "EIF": {"low":0,"average":0,"high":0},
-      "reasoning": "How these counts were derived from the transcript."
   }
 }
 
@@ -92,7 +83,7 @@ def build_analysis_prompt(transcript: str) -> str:
     """Assemble the full user message sent to the LLM."""
     return (
         "Analyse the following software requirements meeting transcript and "
-        "infer the COCOMO and Function Point parameters.\n\n"
+        "infer the COCOMO parameters.\n\n"
         f"{JSON_SCHEMA_HINT}\n\n"
         "----- BEGIN TRANSCRIPT -----\n"
         f"{transcript.strip()}\n"
