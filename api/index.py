@@ -80,7 +80,7 @@ def analyze() -> str:
     kloc_override = request.form.get("kloc")
 
     analysis = offline_analyze(transcript)
-    notice = ("demo", "Analysed with the keyword-based demo analyser.")
+    notice = ("demo", "Analysed with the keyword-based analyser.")
 
     # Recommended option (Basic vs Intermediate) and category come from the analyzer.
     project_type = _project_type_key(
