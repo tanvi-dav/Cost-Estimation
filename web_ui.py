@@ -409,6 +409,7 @@ def _readout(result) -> str:
 def _formula(result) -> str:
     co = PROJECT_CATEGORIES.get(result.category, PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY])
     a, b, cc, d = co["a"], co["b"], co["c"], co["d"]
+    monthly_cost = result.cost / result.effort_pm if result.effort_pm else 0.0
     return (
         "<div class='card'><h2>How this was calculated</h2>"
         "<div class='formula'>"
@@ -422,8 +423,9 @@ def _formula(result) -> str:
         f"<span class='lbl'>Staff</span>  <span class='op'>=</span> Effort÷Time "
         f"<span class='op'>=</span> {result.effort_pm:.1f}÷{result.schedule_months:.1f} "
         f"<span class='op'>=</span> <span class='res'>{result.average_staff:.1f} developers</span><br>"
-        f"<span class='lbl'>Hours</span>  <span class='op'>=</span> Effort×{HOURS_PER_PERSON_MONTH} "
-        f"<span class='op'>=</span> <span class='res'>{result.effort_hours:,.0f} h</span>"
+        f"<span class='lbl'>Cost</span>   <span class='op'>=</span> Staff×Months×Salary "
+        f"<span class='op'>=</span> {result.average_staff:.1f}×{result.schedule_months:.1f}×{result.currency}{monthly_cost:,.0f} "
+        f"<span class='op'>=</span> <span class='res'>{result.currency}{result.cost:,.0f}</span>"
         "</div></div>"
     )
 
