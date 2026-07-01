@@ -17,7 +17,6 @@ import html
 from constants import (
     COST_DRIVERS,
     DEFAULT_PROJECT_CATEGORY,
-    FP_TYPE_NAMES,
     HOURS_PER_PERSON_MONTH,
     PROJECT_CATEGORIES,
     PROJECT_TYPE_LABELS,
@@ -223,8 +222,7 @@ def render_page(title: str, body: str, active: str = "") -> str:
         "<meta name='viewport' content='width=device-width,initial-scale=1'>"
         f"<title>{esc(title)}</title>{STYLE}</head><body>"
         f"{_nav(active)}<main>{body}</main>"
-        "<footer class='wrap'>Estimates are indicative. COCOMO (Boehm, 1981) · "
-        "Function Point Analysis (Albrecht, 1979 / ISO&nbsp;20926).</footer>"
+        "<footer class='wrap'>Estimates are indicative. COCOMO (Boehm, 1981).</footer>"
         "</body></html>"
     )
 
@@ -288,7 +286,7 @@ def render_analyze_form(prefill: str = "", monthly: float = 8000.0) -> str:
         "<span class='hint'>(£)</span></label>"
         f"<input type='number' step='100' id='monthly' name='monthly' value='{int(monthly)}'></div>"
         "<div><label class='field' for='kloc'>KLOC override <span class='hint'>(optional)</span></label>"
-        "<input type='number' step='0.1' id='kloc' name='kloc' placeholder='auto (from notes / Function Points)'></div>"
+        "<input type='number' step='0.1' id='kloc' name='kloc' placeholder='auto (from notes)'></div>"
         "</div>"
         "<button class='btn' type='submit'>Generate estimate →</button>"
         "</form></section>"
@@ -305,7 +303,8 @@ def _category_cards_html(selected: str = DEFAULT_PROJECT_CATEGORY) -> str:
             f"<label class='cat-card'><input type='radio' name='category' value='{key}'{checked}>"
             f"<div class='cname'>{esc(cat['label'])}</div>"
             f"<div class='cdesc'>{esc(cat['description'])}</div>"
-            f"<div class='ccoef'>a={cat['a']} b={cat['b']} c={cat['c']} d={cat['d']}</div>"
+            f"<div class='ccoef'>a={cat['a_basic']} (Basic) / {cat['a_intermediate']} (Interm.)"
+            f" &nbsp;b={cat['b']} c={cat['c']} d={cat['d']}</div>"
             "</label>"
         )
     return f"<div class='cat-grid'>{cards}</div>"
@@ -390,6 +389,9 @@ def render_manual_form() -> str:
 # ---------------------------------------------------------------------------
 def _readout(result) -> str:
     c = result.currency
+    co = PROJECT_CATEGORIES.get(result.category, PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY])
+    a_key = "a_intermediate" if result.project_type == "intermediate" else "a_basic"
+    monthly_cost = result.cost / result.effort_pm if result.effort_pm else 0.0
     return (
         "<div class='readout'>"
         "<div class='topline'>Estimated total cost</div>"
@@ -397,6 +399,8 @@ def _readout(result) -> str:
         f"<div class='costsub'>{PROJECT_TYPE_LABELS.get(result.project_type, result.project_type)} · "
         f"{PROJECT_CATEGORIES.get(result.category, {}).get('label', result.category)} · "
         f"{result.kloc:.1f} KLOC · EAF {result.eaf:.3f}</div>"
+        f"<div class='costsub'>a={co[a_key]} b={co['b']} c={co['c']} d={co['d']} · "
+        f"{c}{monthly_cost:,.0f}/dev/month</div>"
         "<div class='stats'>"
         f"<div class='stat'><div class='k'>Effort</div><div class='v'>{result.effort_pm:.1f}<span style='font-size:.7rem;color:#9aa3b2'> PM</span></div></div>"
         f"<div class='stat'><div class='k'>Schedule</div><div class='v'>{result.schedule_months:.1f}<span style='font-size:.7rem;color:#9aa3b2'> mo</span></div></div>"
@@ -408,7 +412,8 @@ def _readout(result) -> str:
 
 def _formula(result) -> str:
     co = PROJECT_CATEGORIES.get(result.category, PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY])
-    a, b, cc, d = co["a"], co["b"], co["c"], co["d"]
+    a_key = "a_intermediate" if result.project_type == "intermediate" else "a_basic"
+    a, b, cc, d = co[a_key], co["b"], co["c"], co["d"]
     monthly_cost = result.cost / result.effort_pm if result.effort_pm else 0.0
     return (
         "<div class='card'><h2>How this was calculated</h2>"
@@ -458,19 +463,26 @@ SOURCE_COLOURS = [
 
 
 def _analysis_labels() -> dict[str, str]:
+    """Factor labels for the demo analyser dashboard.
+
+    These are pulled straight from ``COST_DRIVERS`` (the same source the
+    Manual Intermediate cost-driver table uses) so the two pages always
+    show identical names for the same factor.
+    """
     return {
         "project_type": "Project type",
-        "complexity": "Complexity",
-        "required_reliability": "Required reliability",
-        "programmer_capability": "Programmer capability",
-        "analyst_capability": "Analyst capability",
-        "platform_constraints": "Platform constraints",
-        "memory_constraints": "Memory constraints",
-        "storage_constraints": "Storage constraints",
-        "schedule_constraints": "Schedule constraints",
-        "team_experience": "Team experience",
-        "modern_practices": "Modern practices",
-        "software_tools": "Software tools",
+        "category": "Category",
+        "complexity": COST_DRIVERS["CPLX"]["name"],
+        "required_reliability": COST_DRIVERS["RELY"]["name"],
+        "programmer_capability": COST_DRIVERS["PCAP"]["name"],
+        "analyst_capability": COST_DRIVERS["ACAP"]["name"],
+        "platform_constraints": COST_DRIVERS["TIME"]["name"],
+        "memory_constraints": COST_DRIVERS["STOR"]["name"],
+        "storage_constraints": COST_DRIVERS["DATA"]["name"],
+        "schedule_constraints": COST_DRIVERS["SCED"]["name"],
+        "team_experience": COST_DRIVERS["AEXP"]["name"],
+        "modern_practices": COST_DRIVERS["MODP"]["name"],
+        "software_tools": COST_DRIVERS["TOOL"]["name"],
         "kloc": "KLOC",
     }
 
@@ -592,32 +604,9 @@ def _highlighted_transcript(transcript: str, analysis: dict) -> str:
         f"<div class='transcript-source'>{''.join(html_parts)}</div></div>"
     )
 
-def _fpa_block(fpa_result, kloc_note: str) -> str:
-    rows = ""
-    for ftype, name in FP_TYPE_NAMES.items():
-        band = fpa_result.counts.get(ftype, {})
-        rows += (f"<tr><td>{esc(name)} <span class='muted'>({ftype})</span></td>"
-                 f"<td class='num'>{band.get('low',0)}</td>"
-                 f"<td class='num'>{band.get('average',0)}</td>"
-                 f"<td class='num'>{band.get('high',0)}</td></tr>")
-    return (
-        "<div class='card'><h2>Function Point Analysis</h2>"
-        f"<p class='muted' style='margin-top:-6px'>{esc(kloc_note)}</p>"
-        "<table><tr><th>Function type</th><th class='num'>Low</th><th class='num'>Avg</th><th class='num'>High</th></tr>"
-        f"{rows}</table>"
-        "<table style='margin-top:14px'>"
-        f"<tr><td>Unadjusted FP (UFP)</td><td class='num'>{fpa_result.ufp}</td></tr>"
-        f"<tr><td>Value Adjustment Factor (VAF)</td><td class='num'>{fpa_result.vaf:.2f}</td></tr>"
-        f"<tr><td>Adjusted FP (AFP)</td><td class='num'>{fpa_result.afp:.1f}</td></tr>"
-        f"<tr><td>Backfiring ({esc(fpa_result.language)})</td><td class='num'>{fpa_result.loc_per_fp} LOC/FP</td></tr>"
-        f"<tr><td>Estimated size</td><td class='num'>{fpa_result.kloc:.2f} KLOC</td></tr>"
-        "</table></div>"
-    )
-
-
 def render_results(result, *, mode: str, notice: tuple[str, str] | None = None,
                    analysis: dict | None = None, transcript: str = "",
-                   fpa_result=None, kloc_note: str = "",
+                   kloc_note: str = "",
                    back_href: str = "/analyze") -> str:
     parts = ["<section class='section wrap'>",
              "<div class='eyebrow'>Result</div>",
@@ -625,13 +614,13 @@ def render_results(result, *, mode: str, notice: tuple[str, str] | None = None,
     if notice:
         kind, msg = notice
         parts.append(f"<div class='notice {kind}'>{esc(msg)}</div>")
+    if kloc_note:
+        parts.append(f"<p class='muted'>{esc(kloc_note)}</p>")
     parts.append(_readout(result))
     parts.append(_formula(result))
     if analysis:
         parts.append(_factor_grid(analysis))
         parts.append(_highlighted_transcript(transcript, analysis))
-    if fpa_result is not None:
-        parts.append(_fpa_block(fpa_result, kloc_note))
     parts.append(_driver_table(result))
     parts.append(
         f"<a class='btn ghost' href='{back_href}'>← Run another estimate</a></section>"

@@ -4,8 +4,8 @@ A **website** that estimates software development effort, schedule, team size
 and cost. It has two modes:
 
 1. **AI Analysis** — paste a requirements meeting transcript; an LLM infers
-   every COCOMO factor (with evidence + confidence), sizes the system with
-   **Function Point Analysis**, and produces the full report.
+   every COCOMO factor (with evidence + confidence) and produces the full
+   report.
 2. **Manual Calculator** — choose the project type, enter KLOC, and rate every
    COCOMO cost driver yourself; the app computes EAF, Effort, Schedule, Average
    Staff and Cost.

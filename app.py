@@ -161,8 +161,8 @@ def run_transcript_analysis() -> None:
             driver_ratings[code] = _normalise_rating(code, agreed)
             reasoning[label] = {"value": agreed, "reason": factor.get("reasoning")}
 
-    # --- Size (KLOC): from FPA, from the analyzer, or from the user ---
-    kloc = _resolve_kloc(analysis.get("kloc", {}), analysis.get("function_points"))
+    # --- Size (KLOC): from the analyzer, or from the user ---
+    kloc = _resolve_kloc(analysis.get("kloc", {}))
 
     # --- Cost assumption ---
     monthly = DEFAULT_MONTHLY_COST_PER_PERSON
@@ -175,7 +175,7 @@ def run_transcript_analysis() -> None:
     print("\n" + generate_report(result, reasoning))
 
 
-def _resolve_kloc(kloc_factor: dict, fp_block: dict | None) -> float:
+def _resolve_kloc(kloc_factor: dict) -> float:
     """Decide the KLOC to use, asking the user only when necessary."""
     value = kloc_factor.get("value")
     if value and not kloc_factor.get("needs_confirmation"):
@@ -183,20 +183,6 @@ def _resolve_kloc(kloc_factor: dict, fp_block: dict | None) -> float:
               f"({kloc_factor.get('confidence')}% confidence).")
         if ask_yes_no("Accept this size?", default=True):
             return float(value)
-
-    # Offer to derive it from Function Point Analysis.
-    if fp_block and ask_yes_no(
-            "\nSize is uncertain. Derive it from Function Point Analysis?", default=True
-    ):
-        from fpa import FunctionPointAnalyzer
-        counts = {k: v for k, v in fp_block.items() if isinstance(v, dict)}
-        if counts:
-            res = FunctionPointAnalyzer().analyze(counts, [3] * 14, "default")
-            print(f"FPA-derived size: {res.kloc:.2f} KLOC "
-                  f"(AFP={res.afp:.0f}).")
-            if ask_yes_no("Use this FPA-derived size?", default=True):
-                return res.kloc
-        return run_manual_fpa()
 
     print("\nI cannot accurately estimate the project size.")
     return ask_float("Please enter the estimated KLOC", minimum=0.01)

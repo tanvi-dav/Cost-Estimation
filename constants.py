@@ -26,37 +26,43 @@ from __future__ import annotations
 # Separately, there are two calculation OPTIONS that decide the EAF:
 #   Option 1 - "Basic"        : EAF is fixed at 1.0 (no cost drivers).
 #   Option 2 - "Intermediate" : EAF is the product of the 15 cost drivers.
-# Category (a/b/c/d) and option (EAF) are independent choices - the user
-# picks one of each.
+# Category (b/c/d) and option (EAF) are independent choices - the user picks
+# one of each. The "a" coefficient, however, is NOT shared between the two
+# options: Boehm's Basic and Intermediate models publish different "a"
+# values for the Organic and Embedded categories (Semi-Detached happens to
+# match), so each category carries both "a_basic" and "a_intermediate".
 # ---------------------------------------------------------------------------
 PROJECT_CATEGORIES: dict[str, dict] = {
     "organic": {
         "label": "Organic",
         "description": "Small, familiar, in-house style project with an "
                        "experienced team and flexible requirements.",
-        "a": 2.4, "b": 1.05, "c": 2.5, "d": 0.38,
+        "a_basic": 2.4, "a_intermediate": 3.2, "b": 1.05, "c": 2.5, "d": 0.38,
     },
     "semi_detached": {
         "label": "Semi-Detached",
         "description": "Mixed team experience, a blend of rigid and "
                        "flexible requirements - the most common case.",
-        "a": 3.0, "b": 1.12, "c": 2.5, "d": 0.35,
+        "a_basic": 3.0, "a_intermediate": 3.0, "b": 1.12, "c": 2.5, "d": 0.35,
     },
     "embedded": {
         "label": "Embedded",
         "description": "Tight constraints (hardware, real-time, complex "
                        "interfaces) and strict requirements.",
-        "a": 3.6, "b": 1.20, "c": 2.5, "d": 0.32,
+        "a_basic": 3.6, "a_intermediate": 2.8, "b": 1.20, "c": 2.5, "d": 0.32,
     },
 }
 
 # Default category used if the user/analyzer doesn't specify one.
 DEFAULT_PROJECT_CATEGORY: str = "organic"
 
-# Backwards-compatible alias (organic coefficients) for any code that still
-# imports the single flat set.
+# Backwards-compatible alias (organic, Basic-model coefficients) for any code
+# that still imports the single flat set.
 COCOMO_COEFFICIENTS: dict[str, float] = {
-    k: PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY][k] for k in ("a", "b", "c", "d")
+    "a": PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY]["a_basic"],
+    "b": PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY]["b"],
+    "c": PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY]["c"],
+    "d": PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY]["d"],
 }
 
 # Human-readable labels for the two EAF options (used by menus / reports).

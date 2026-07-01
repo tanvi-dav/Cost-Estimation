@@ -29,10 +29,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, request  # noqa: E402
 
 import web_ui as ui  # noqa: E402
-from app import FACTOR_TO_DRIVER, _normalise_rating, _project_type_key  # noqa: E402
+from app import FACTOR_TO_DRIVER, _category_key, _normalise_rating, _project_type_key  # noqa: E402
 from cocomo import CocomoEstimator  # noqa: E402
-from constants import COST_DRIVERS  # noqa: E402
-from fpa import FunctionPointAnalyzer  # noqa: E402
+from constants import COST_DRIVERS, DEFAULT_PROJECT_CATEGORY  # noqa: E402
 from transcript_ai import offline_analyze  # noqa: E402
 
 app = Flask(__name__)
@@ -83,13 +82,15 @@ def analyze() -> str:
     analysis = offline_analyze(transcript)
     notice = ("demo", "Analysed with the keyword-based demo analyser.")
 
-    # Recommended option (Basic vs Intermediate) comes from the analyzer.
+    # Recommended option (Basic vs Intermediate) and category come from the analyzer.
     project_type = _project_type_key(
         str(analysis.get("project_type", {}).get("value", "basic"))
     )
+    category = _category_key(
+        str(analysis.get("category", {}).get("value", DEFAULT_PROJECT_CATEGORY))
+    )
 
-    # Size: explicit override > size stated in notes > derive from FPA.
-    fpa_result = None
+    # Size: explicit override > size stated in notes > ask the user.
     kloc_note = ""
     kloc_factor = analysis.get("kloc", {}) or {}
     if kloc_override:
@@ -100,23 +101,20 @@ def analyze() -> str:
         ev = ", ".join(kloc_factor.get("evidence", [])) or "stated in the notes"
         kloc_note = f"Size taken from the notes ({ev}): {kloc:g} KLOC."
     else:
-        fp_block = analysis.get("function_points", {}) or {}
-        counts = {k: v for k, v in fp_block.items() if isinstance(v, dict)}
-        fpa_result = FunctionPointAnalyzer().analyze(counts, [3] * 14, "default")
-        kloc = max(fpa_result.kloc, 0.5)  # floor avoids zero-size demos
-        kloc_note = (f"No size was stated, so it was derived from the inferred "
-                     f"function points: {fpa_result.afp:.0f} AFP × "
-                     f"{fpa_result.loc_per_fp} LOC/FP ≈ {kloc:.2f} KLOC.")
+        return ui.render_error(
+            "Couldn't determine a project size from your notes. Please add a "
+            "KLOC override and try again.",
+            back_href="/analyze",
+        )
 
     # Cost drivers only matter for the Intermediate option.
     drivers = _drivers_from_analysis(analysis) if project_type == "intermediate" else {}
     result = CocomoEstimator(monthly_cost_per_person=monthly).estimate(
-        kloc, project_type, drivers
+        kloc, project_type, drivers, category=category
     )
 
     return ui.render_results(result, mode="Automated", notice=notice,
                              analysis=analysis, transcript=transcript,
-                             fpa_result=fpa_result,
                              kloc_note=kloc_note, back_href="/analyze")
 
 
@@ -131,6 +129,7 @@ def manual_form() -> str:
 @app.post("/manual")
 def manual() -> str:
     project_type = _project_type_key(request.form.get("ptype", "basic"))
+    category = _category_key(request.form.get("category", DEFAULT_PROJECT_CATEGORY))
     kloc = _to_float(request.form.get("kloc"), 0.0)
     if kloc <= 0:
         return ui.render_error("Please enter a KLOC value greater than zero.",
@@ -142,7 +141,7 @@ def manual() -> str:
     drivers = {code: request.form.get(code, "Nominal") for code in COST_DRIVERS}
 
     result = CocomoEstimator(monthly_cost_per_person=monthly).estimate(
-        kloc, project_type, drivers
+        kloc, project_type, drivers, category=category
     )
     notice = ("demo", "Calculated from your manual inputs.")
     return ui.render_results(result, mode="Manual", notice=notice,
