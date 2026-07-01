@@ -256,7 +256,7 @@ def render_landing() -> str:
         "<span class='go'>Open calculator →</span></a>"
         "</div></section>"
     )
-    return render_page("COCOMO Estimator (Demo)", body, "home")
+    return render_page("COCOMO Estimator", body, "home")
 
 
 SAMPLE_HINT = (
@@ -357,7 +357,7 @@ def render_manual_form() -> str:
 
     body = (
         "<section class='section wrap'>"
-        "<div class='eyebrow'>Demo</div><h1 style='font-size:1.9rem'>Manual COCOMO Calculator</h1>"
+        "<div class='eyebrow'>Mode 02</div><h1 style='font-size:1.9rem'>Manual COCOMO Calculator</h1>"
         "<p class='lede'>Choose Basic or Intermediate, pick the project category (sets a/b/c/d), "
         "enter the size, and (for Intermediate) rate every effort multiplier on the grid below. "
         "The app computes the EAF, effort, schedule, average staff and cost.</p>"
