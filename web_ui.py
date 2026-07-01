@@ -389,6 +389,9 @@ def render_manual_form() -> str:
 # ---------------------------------------------------------------------------
 def _readout(result) -> str:
     c = result.currency
+    co = PROJECT_CATEGORIES.get(result.category, PROJECT_CATEGORIES[DEFAULT_PROJECT_CATEGORY])
+    a_key = "a_intermediate" if result.project_type == "intermediate" else "a_basic"
+    monthly_cost = result.cost / result.effort_pm if result.effort_pm else 0.0
     return (
         "<div class='readout'>"
         "<div class='topline'>Estimated total cost</div>"
@@ -396,6 +399,8 @@ def _readout(result) -> str:
         f"<div class='costsub'>{PROJECT_TYPE_LABELS.get(result.project_type, result.project_type)} · "
         f"{PROJECT_CATEGORIES.get(result.category, {}).get('label', result.category)} · "
         f"{result.kloc:.1f} KLOC · EAF {result.eaf:.3f}</div>"
+        f"<div class='costsub'>a={co[a_key]} b={co['b']} c={co['c']} d={co['d']} · "
+        f"{c}{monthly_cost:,.0f}/dev/month</div>"
         "<div class='stats'>"
         f"<div class='stat'><div class='k'>Effort</div><div class='v'>{result.effort_pm:.1f}<span style='font-size:.7rem;color:#9aa3b2'> PM</span></div></div>"
         f"<div class='stat'><div class='k'>Schedule</div><div class='v'>{result.schedule_months:.1f}<span style='font-size:.7rem;color:#9aa3b2'> mo</span></div></div>"
