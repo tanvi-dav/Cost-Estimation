@@ -464,6 +464,7 @@ def _analysis_labels() -> dict[str, str]:
     """
     return {
         "project_type": "Project type",
+        "category": "Category",
         "complexity": COST_DRIVERS["CPLX"]["name"],
         "required_reliability": COST_DRIVERS["RELY"]["name"],
         "programmer_capability": COST_DRIVERS["PCAP"]["name"],
