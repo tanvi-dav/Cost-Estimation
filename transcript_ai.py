@@ -266,14 +266,6 @@ def offline_analyze(transcript: str) -> dict:
         "modern_practices": nominal("Engineering practices not described."),
         "software_tools": nominal("Tooling not described."),
         "kloc": kloc_block,
-        "function_points": {
-            "EI": {"low": 0, "average": 2 if med_ev else 0, "high": 1 if high_ev else 0},
-            "EO": {"low": 0, "average": 1 if med_ev else 0, "high": 0},
-            "EQ": {"low": 0, "average": 1 if med_ev else 0, "high": 0},
-            "ILF": {"low": 0, "average": 2 if med_ev else 0, "high": 0},
-            "EIF": {"low": 0, "average": 1 if rely_ev else 0, "high": 0},
-            "reasoning": "Rough counts inferred from mentioned modules; confirm manually.",
-        },
     }
 
 
@@ -281,7 +273,7 @@ def offline_analyze(transcript: str) -> dict:
 # Main analyzer class
 # ---------------------------------------------------------------------------
 class TranscriptAnalyzer:
-    """Analyses a transcript into explainable COCOMO/FPA parameters."""
+    """Analyses a transcript into explainable COCOMO parameters."""
 
     def __init__(self, config: AnalyzerConfig | None = None) -> None:
         self.config = config or AnalyzerConfig()

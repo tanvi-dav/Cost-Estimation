@@ -106,12 +106,20 @@ def _validate_category(category: str) -> str:
 
 
 def calculate_effort(kloc: float, eaf: float = 1.0,
-                     category: str = DEFAULT_PROJECT_CATEGORY) -> float:
-    """Effort in person-months: a * KLOC^b * EAF, using the category's a/b."""
+                     category: str = DEFAULT_PROJECT_CATEGORY,
+                     project_type: str = "basic") -> float:
+    """Effort in person-months: a * KLOC^b * EAF, using the category's a/b.
+
+    Boehm's Basic and Intermediate models publish different "a" coefficients
+    for the same category (Organic/Embedded differ; Semi-Detached matches),
+    so ``project_type`` selects which "a" to use.
+    """
     if kloc <= 0:
         raise ValueError("KLOC must be greater than zero.")
     coeffs = PROJECT_CATEGORIES[_validate_category(category)]
-    return coeffs["a"] * (kloc ** coeffs["b"]) * eaf
+    ptype = _validate_project_type(project_type)
+    a = coeffs["a_intermediate"] if ptype == "intermediate" else coeffs["a_basic"]
+    return a * (kloc ** coeffs["b"]) * eaf
 
 
 def calculate_schedule(effort_pm: float, category: str = DEFAULT_PROJECT_CATEGORY) -> float:
@@ -169,7 +177,7 @@ class CocomoEstimator:
             driver_ratings = {}
         else:
             eaf = calculate_eaf(driver_ratings)
-        effort_pm = calculate_effort(kloc, eaf, category)
+        effort_pm = calculate_effort(kloc, eaf, category, ptype)
         schedule = calculate_schedule(effort_pm, category)
         staff = calculate_staff(effort_pm, schedule)
         cost = estimate_cost(effort_pm, self.monthly_cost_per_person)
@@ -201,10 +209,11 @@ def generate_report(result: CocomoResult,
     """
     lines: list[str] = [banner("COCOMO ESTIMATION REPORT"), ""]
     coeffs = PROJECT_CATEGORIES.get(result.category, {})
+    a_key = "a_intermediate" if result.project_type == "intermediate" else "a_basic"
     lines += [
         f"Project Type:        {PROJECT_TYPE_LABELS.get(result.project_type, result.project_type)}",
         f"Project Category:    {coeffs.get('label', result.category)} "
-        f"(a={coeffs.get('a')}, b={coeffs.get('b')}, c={coeffs.get('c')}, d={coeffs.get('d')})",
+        f"(a={coeffs.get(a_key)}, b={coeffs.get('b')}, c={coeffs.get('c')}, d={coeffs.get('d')})",
         f"Estimated Size:      {result.kloc:.1f} KLOC",
         f"Effort Adj. Factor:  {result.eaf:.3f}",
         f"Estimated Effort:    {result.effort_pm:.2f} Person-Months",
