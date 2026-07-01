@@ -29,9 +29,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from flask import Flask, request  # noqa: E402
 
 import web_ui as ui  # noqa: E402
-from app import FACTOR_TO_DRIVER, _normalise_rating, _project_type_key  # noqa: E402
+from app import FACTOR_TO_DRIVER, _category_key, _normalise_rating, _project_type_key  # noqa: E402
 from cocomo import CocomoEstimator  # noqa: E402
-from constants import COST_DRIVERS  # noqa: E402
+from constants import COST_DRIVERS, DEFAULT_PROJECT_CATEGORY  # noqa: E402
 from transcript_ai import offline_analyze  # noqa: E402
 
 app = Flask(__name__)
@@ -126,6 +126,7 @@ def manual_form() -> str:
 @app.post("/manual")
 def manual() -> str:
     project_type = _project_type_key(request.form.get("ptype", "basic"))
+    category = _category_key(request.form.get("category", DEFAULT_PROJECT_CATEGORY))
     kloc = _to_float(request.form.get("kloc"), 0.0)
     if kloc <= 0:
         return ui.render_error("Please enter a KLOC value greater than zero.",
@@ -137,7 +138,7 @@ def manual() -> str:
     drivers = {code: request.form.get(code, "Nominal") for code in COST_DRIVERS}
 
     result = CocomoEstimator(monthly_cost_per_person=monthly).estimate(
-        kloc, project_type, drivers
+        kloc, project_type, drivers, category=category
     )
     notice = ("demo", "Calculated from your manual inputs.")
     return ui.render_results(result, mode="Manual", notice=notice,
