@@ -147,7 +147,7 @@ table.driver-table td.cell .mult{display:block;font-family:var(--mono);font-size
 .readout .topline{font-family:var(--mono);font-size:.78rem;letter-spacing:.14em;text-transform:uppercase;color:#9aa3b2}
 .readout .cost{font-family:var(--mono);font-weight:600;font-size:3rem;line-height:1.05;margin:.2rem 0 .1rem;letter-spacing:-.02em}
 .readout .costsub{color:#aeb6c4;font-size:.92rem}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:#ffffff1a;border-radius:10px;overflow:hidden;margin-top:22px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#ffffff1a;border-radius:10px;overflow:hidden;margin-top:22px}
 .stat{background:var(--ink);padding:14px 16px}
 .stat .k{font-size:.74rem;letter-spacing:.1em;text-transform:uppercase;color:#9aa3b2}
 .stat .v{font-family:var(--mono);font-size:1.3rem;font-weight:600;margin-top:3px}
@@ -403,9 +403,8 @@ def _readout(result) -> str:
         f"{c}{monthly_cost:,.0f}/dev/month</div>"
         "<div class='stats'>"
         f"<div class='stat'><div class='k'>Effort</div><div class='v'>{result.effort_pm:.1f}<span style='font-size:.7rem;color:#9aa3b2'> PM</span></div></div>"
-        f"<div class='stat'><div class='k'>Schedule</div><div class='v'>{result.schedule_months:.1f}<span style='font-size:.7rem;color:#9aa3b2'> mo</span></div></div>"
+        f"<div class='stat'><div class='k'>Time</div><div class='v'>{result.schedule_months:.1f}<span style='font-size:.7rem;color:#9aa3b2'> mo</span></div></div>"
         f"<div class='stat'><div class='k'>Avg team</div><div class='v'>{result.average_staff:.1f}<span style='font-size:.7rem;color:#9aa3b2'> dev</span></div></div>"
-        f"<div class='stat'><div class='k'>Effort hours</div><div class='v'>{result.effort_hours:,.0f}</div></div>"
         "</div></div>"
     )
 
@@ -428,8 +427,8 @@ def _formula(result) -> str:
         f"<span class='lbl'>Staff</span>  <span class='op'>=</span> Effort÷Time "
         f"<span class='op'>=</span> {result.effort_pm:.1f}÷{result.schedule_months:.1f} "
         f"<span class='op'>=</span> <span class='res'>{result.average_staff:.1f} developers</span><br>"
-        f"<span class='lbl'>Cost</span>   <span class='op'>=</span> Staff×Months×Salary "
-        f"<span class='op'>=</span> {result.average_staff:.1f}×{result.schedule_months:.1f}×{result.currency}{monthly_cost:,.0f} "
+        f"<span class='lbl'>Cost</span>   <span class='op'>=</span> Staff×Time×Salary "
+        f"<span class='op'>=</span> {result.average_staff:.1f}×{result.schedule_months:.1f}×{monthly_cost:,.0f} "
         f"<span class='op'>=</span> <span class='res'>{result.currency}{result.cost:,.0f}</span>"
         "</div></div>"
     )
